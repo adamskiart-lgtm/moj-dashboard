@@ -55,3 +55,74 @@ def get_clean_alerts(url, keywords):
         for node in potential_nodes:
             # Pobieramy tekst bez dzieci, żeby nie powtarzać zagnieżdżonych divów
             text = node.get_text(" ", strip=True)
+            
+            # Warunki: zawiera słowo kluczowe ORAZ jest wystarczająco długi (pomija menu)
+            if any(word in text.lower() for word in keywords) and len(text) > 40:
+                if text not in alerts:
+                    # Dodatkowe czyszczenie z wielokrotnych spacji
+                    clean_text = re.sub(r'\s+', ' ', text)
+                    alerts.append(clean_text)
+        
+        if not alerts:
+            return None, []
+        
+        # Zwracamy najnowszy (pierwszy) i resztę jako archiwum
+        return alerts[0], alerts[1:]
+    except Exception as e:
+        return f"Błąd połączenia: {e}", []
+
+# --- 4. SIDEBAR ---
+with st.sidebar:
+    st.title("📂 Menu")
+    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"])
+    st.divider()
+    st.caption("v3.1 | Clean Polish Post Alerts")
+
+# --- 5. WIDOKI ---
+if choice == "📡 e-Doręczenia":
+    st.header("📡 Monitoring e-Doręczeń")
+    
+    sites = [
+        {"name": "Poczta Polska (Prace Serwisowe)", "url": "https://edoreczenia.poczta-polska.pl/informacje/prace-serwisowe/", "keywords": ["przerwa", "techniczna", "utrudnienia", "awaria"]},
+        {"name": "GOV.PL (Status Usługi)", "url": "https://www.gov.pl/web/e-doreczenia/niedostepnosc-uslugi-edoreczen", "keywords": ["niedostępność", "planowana", "przerwa"]}
+    ]
+
+    for site in sites:
+        latest, archive = get_clean_alerts(site["url"], site["keywords"])
+        
+        with st.container(border=True):
+            st.subheader(f"🕵️ {site['name']}")
+            if latest:
+                st.error("**OSTATNI KOMUNIKAT:**")
+                st.write(latest)
+                
+                if archive:
+                    with st.expander("📁 Starsze wpisy z tej strony"):
+                        for msg in archive:
+                            st.write(f"• {msg}")
+                            st.divider()
+            else:
+                st.success("✅ Brak aktywnych informacji o przerwach.")
+
+    st.divider()
+
+    # KALENDARZ NA DOLE
+    st.subheader("📅 Harmonogram Planowany (Historyczny)")
+    all_events = get_gov_planned_events()
+    calendar_options = {
+        "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth,listMonth"},
+        "initialView": "dayGridMonth",
+        "height": 480,
+        "locale": "pl"
+    }
+    calendar(events=all_events, options=calendar_options)
+
+elif choice == "💻 System i Soft":
+    st.header("💻 Centrum Systemowe")
+    st.info("Dell Precision 5540 | i9 | 32GB RAM")
+    st.progress(0.46, text="Dysk C: 433GB wolne")
+    st.table([
+        {"Program": "Adobe Photoshop 2026", "Status": "⚠️ Update"},
+        {"Program": "Adobe Lightroom Classic", "Status": "✅ OK"},
+        {"Program": "Microsoft Edge", "Status": "✅ OK"}
+    ])
