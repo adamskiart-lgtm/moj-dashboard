@@ -8,110 +8,103 @@ from streamlit_calendar import calendar
 # --- 1. KONFIGURACJA ---
 st.set_page_config(page_title="Operations Center PRO", layout="wide")
 
-# --- 2. DANE DO KALENDARZA (PLANOWANE) ---
+# --- 2. DANE DO KALENDARZA (BEZ DUBELTOWYCH GODZIN) ---
 def get_gov_planned_events():
+    # Uproszczona lista - godziny podajemy TYLKO w tytule
     raw_data = [
-        ("2026-03-01", "15:00", "20:00", "PPSA"),
-        ("2026-02-26", "18:00", "23:00", "PPSA"),
-        ("2026-02-18", "18:00", "23:00", "PPSA"),
-        ("2026-02-15", "15:00", "20:00", "PPSA"),
-        ("2026-02-08", "15:00", "20:00", "PPSA"),
+        ("2026-03-01", "15:00-20:00", "PPSA"),
+        ("2026-02-26", "18:00-23:00", "PPSA"),
+        ("2026-02-18", "18:00-23:00", "PPSA"),
+        ("2026-02-15", "15:00-20:00", "PPSA"),
+        ("2026-02-08", "15:00-20:00", "PPSA"),
     ]
     events = []
-    for d, s, e, p in raw_data:
+    for d, time_range, p in raw_data:
         events.append({
-            "title": f"{s}-{e} | {p}",
-            "start": f"{d}T{s}:00",
-            "end": f"{d}T{e}:00",
+            "title": f"{time_range} | {p}",
+            "start": d, # Podajemy tylko datę, by uniknąć dublowania godzin przez system kalendarza
+            "end": d,
             "backgroundColor": "#EE6C4D",
-            "display": "block"
+            "display": "block",
+            "allDay": True # Dzięki temu godzina z systemu nie dopisuje się obok Twojego tytułu
         })
     return events
 
-# --- 3. PRECYZYJNE POBIERANIE KOMUNIKATU (DO CZERWONEJ LINII) ---
-def get_poczta_clean_alert(url, keywords):
+# --- 3. UNIWERSALNA FUNKCJA POBIERANIA OSTATNIEGO KOMUNIKATU ---
+def get_latest_alert(url, keywords):
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
         res = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(res.text, 'html.parser')
         
-        # 1. Usuwamy eArchiwum i menu
-        for t in soup(['nav', 'header', 'footer', 'script', 'style']):
+        # Czyszczenie śmieci
+        for t in soup(['nav', 'header', 'footer', 'script', 'style', 'button']):
             t.extract()
         for t in soup.find_all(string=re.compile("earchiwum", re.I)):
             if t.parent: t.parent.extract()
 
-        # 2. Szukamy głównego kontenera treści (na Poczcie to zazwyczaj .entry-content lub artykuł)
-        content = soup.find('div', {'class': 'entry-content'}) or soup.find('article') or soup.body
-        
-        # 3. Pobieramy cały tekst i szukamy daty publikacji, która kończy komunikat przed linią
-        full_text = content.get_text("\n", strip=True)
-        
-        # Szukamy wzorca daty na końcu komunikatu (np. 20.02.2026)
-        date_match = re.search(r'\d{2}\.\d{2}\.\d{4}', full_text)
-        
-        if date_match:
-            # Ucinamy tekst zaraz po znalezionej dacie publikacji
-            clean_text = full_text[:date_match.end()]
-            # Wszystko co zostało pod spodem trafia do archiwum (opcjonalnie)
-            archive_text = full_text[date_match.end():].strip()
-        else:
-            clean_text = full_text
-            archive_text = ""
-
-        # Sprawdzamy, czy w czystym tekście są nasze słowa kluczowe
-        if any(w in clean_text.lower() for w in keywords):
-            return clean_text, archive_text
-        return None, ""
+        # Pobieranie tekstów i szukanie pierwszego pasującego bloku
+        nodes = soup.find_all(['p', 'div', 'li', 'article'])
+        for node in nodes:
+            text = node.get_text(" ", strip=True)
+            if any(w in text.lower() for w in keywords) and len(text) > 50:
+                # Jeśli to Poczta Polska, tniemy po dacie publikacji (do czerwonej linii)
+                date_match = re.search(r'\d{2}\.\d{2}\.\d{4}', text)
+                if date_match:
+                    return text[:date_match.end()]
+                return text
+        return None
     except:
-        return "Błąd połączenia.", ""
+        return "Błąd połączenia."
 
 # --- 4. SIDEBAR ---
 with st.sidebar:
     st.title("📂 Menu")
     choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"])
     st.divider()
-    st.caption("v3.2 | Red Line Precision")
+    st.caption("v3.3 | Final Version")
 
 # --- 5. WIDOKI ---
 if choice == "📡 e-Doręczenia":
-    st.header("📡 Monitoring e-Doręczeń")
+    st.header("📡 Ostatnie Komunikaty e-Doręczeń")
     
-    # POCZTA POLSKA - PRECYZYJNY WIDOK
-    url_pp = "https://edoreczenia.poczta-polska.pl/informacje/prace-serwisowe/"
-    latest_pp, archive_pp = get_poczta_clean_alert(url_pp, ["przerwa", "techniczna", "utrudnienia", "awaria"])
+    col1, col2 = st.columns(2)
     
-    with st.container(border=True):
-        st.subheader("🕵️ Poczta Polska (Ostatni Komunikat)")
-        if latest_pp:
-            st.error("**PEŁNA TREŚĆ KOMUNIKATU:**")
-            st.write(latest_pp)
-            
-            if archive_pp and len(archive_pp) > 50:
-                with st.expander("📁 Pokaż pozostałe dane ze strony"):
-                    st.write(archive_pp)
+    # Źródło 1: Poczta Polska
+    with col1:
+        st.subheader("🕵️ Poczta Polska")
+        alert_pp = get_latest_alert("https://edoreczenia.poczta-polska.pl/informacje/prace-serwisowe/", ["przerwa", "techniczna", "awaria"])
+        if alert_pp:
+            st.error(alert_pp)
         else:
-            st.success("✅ Brak aktywnych komunikatów o przerwach.")
+            st.success("Brak nowych komunikatów.")
+
+    # Źródło 2: GOV.PL
+    with col2:
+        st.subheader("🕵️ GOV.PL")
+        alert_gov = get_latest_alert("https://www.gov.pl/web/e-doreczenia/niedostepnosc-uslugi-edoreczen", ["niedostępność", "planowana", "przerwa"])
+        if alert_gov:
+            st.warning(alert_gov)
+        else:
+            st.success("Brak nowych komunikatów.")
 
     st.divider()
 
-    # GOV.PL - KLASYCZNY WIDOK
-    # (Tutaj zostawiamy poprzednią logikę, bo GOV ma inną strukturę)
-    
-    # KALENDARZ NA DOLE
+    # KALENDARZ NA DOLE (WYCZYSZCZONY)
     st.subheader("📅 Harmonogram Planowany")
-    all_events = get_gov_planned_events()
     calendar_options = {
         "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth"},
         "initialView": "dayGridMonth",
         "height": 450,
-        "locale": "pl"
+        "locale": "pl",
+        "displayEventTime": False # TO USUWA WYTEŁUSZCZONE GODZINY SYSTEMOWE
     }
-    calendar(events=all_events, options=calendar_options)
+    calendar(events=get_gov_planned_events(), options=calendar_options)
 
 elif choice == "💻 System i Soft":
     st.header("💻 Centrum Systemowe")
-    st.info("Dell Precision 5540 | i9 | 32GB RAM")
+    st.write("Dell Precision 5540 | i9 | 32GB RAM")
+    st.progress(0.46, text="Dysk C: 433GB wolne")
     st.table([
         {"Program": "Adobe Photoshop 2026", "Status": "⚠️ Update"},
         {"Program": "Microsoft Edge", "Status": "✅ OK"}
