@@ -73,4 +73,75 @@ def check_status(url, keywords):
 with st.sidebar:
     st.title("📂 Panel Sterowania")
     choice = st.radio(
-        "N
+        "Nawigacja:",
+        ["📡 e-Doręczenia", "💻 System i Oprogramowanie"]
+    )
+    st.divider()
+    st.info(f"Użytkownik: Artur\nGodzina: {datetime.datetime.now().strftime('%H:%M')}")
+    if st.button("Wyślij test ICS na agroapp"):
+        send_full_alert("Ręczny test systemu", "Wszystko działa poprawnie.")
+        st.success("Wysłano!")
+
+# --- 4. LOGIKA WYŚWIETLANIA ---
+
+if choice == "📡 e-Doręczenia":
+    st.header("📡 Monitoring e-Doręczeń")
+    st.write("Weryfikacja dostępności usług Poczty Polskiej i GOV.PL.")
+    
+    col1, col2 = st.columns(2)
+    sites = [
+        {"name": "Poczta Polska", "url": "https://edoreczenia.poczta-polska.pl/informacje/prace-serwisowe/", "keywords": ["przerwa", "techniczna", "utrudnienia"]},
+        {"name": "GOV.PL", "url": "https://www.gov.pl/web/e-doreczenia/niedostepnosc-uslugi-edoreczen", "keywords": ["niedostępność", "awaria", "przerwa"]}
+    ]
+
+    for i, site in enumerate(sites):
+        found, context = check_status(site["url"], site["keywords"])
+        with [col1, col2][i]:
+            with st.container(border=True):
+                st.subheader(site["name"])
+                if found:
+                    st.error(f"🔴 WYKRYTO: {', '.join(found)}")
+                    st.write(f"**Treść:** {context}")
+                    if st.button(f"Wyślij zaproszenie ({site['name']})", key=site['name']):
+                        send_full_alert(f"⚠️ Alert: {site['name']}", context)
+                        st.success("Wysłano!")
+                else:
+                    st.success("🔵 System dostępny")
+                st.caption(f"[Źródło]({site['url']})")
+
+elif choice == "💻 System i Oprogramowanie":
+    st.header("💻 Centrum Systemowe")
+    
+    # Góra: Informacje o sprzęcie
+    col_cpu, col_disk = st.columns(2)
+    with col_cpu:
+        with st.container(border=True):
+            st.subheader("Specyfikacja Dell Precision 5540")
+            st.write("🚀 **Procesor:** Intel Core i9-9880H")
+            st.write("🧠 **Pamięć:** 32 GB RAM")
+            st.write("🎨 **Grafika:** Quadro T2000")
+    
+    with col_disk:
+        with st.container(border=True):
+            st.subheader("Zasoby lokalne")
+            st.progress(0.46, text="Dysk C: 433GB wolne")
+            st.write("🔋 **Bateria:** 82% (Kondycja dobra)")
+
+    st.divider()
+    
+    # Dół: Tabela oprogramowania
+    st.subheader("⚙️ Status Oprogramowania")
+    soft_data = [
+        {"Program": "Adobe Photoshop 2026", "Twoja": "27.3.1", "Najnowsza": "27.4.0", "Status": "⚠️ Update"},
+        {"Program": "Adobe Lightroom Classic", "Twoja": "15.1", "Najnowsza": "15.1", "Status": "✅ OK"},
+        {"Program": "Microsoft Edge", "Twoja": "145.0", "Najnowsza": "145.0", "Status": "✅ OK"},
+        {"Program": "Total Commander UP", "Twoja": "9.2", "Najnowsza": "9.3", "Status": "⚠️ Nowa wersja"}
+    ]
+    st.table(soft_data)
+
+    st.divider()
+    st.subheader("📅 Nadchodzące sesje (Kalendarz)")
+    st.info("📌 25.02 - Sesja produktowa / Retusz")
+
+# --- STOPKA ---
+st.sidebar.caption(f"v2.6 | artur.adamski@agroapp.com.pl")
