@@ -3,6 +3,7 @@ import datetime
 import requests
 from bs4 import BeautifulSoup
 import smtplib
+import re
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
@@ -11,44 +12,66 @@ from email import encoders
 # --- KONFIGURACJA STRONY ---
 st.set_page_config(page_title="E-Doręczenia Monitor PRO", layout="wide")
 
-# --- FUNKCJA WYSYŁANIA MAILA Z ZAPROSZENIEM ---
-def send_email_with_invite(subject, message, start_dt):
+# --- FUNKCJA WYCIĄGANIA DATY Z TEKSTU ---
+def extract_dates(text):
+    # Szukamy daty w formacie DD.MM.YYYY lub DD.MM
+    date_pattern = r'(\d{1,2}\.\d{1,2}(?:\.\d{4})?)'
+    # Szukamy godziny w formacie HH:MM
+    time_pattern = r'(\d{1,2}:\d{2})'
+    
+    found_dates = re.findall(date_pattern, text)
+    found_times = re.findall(time_pattern, text)
+    
+    return found_dates, found_times
+
+# --- FUNKCJA WYSYŁANIA MAILA Z INTELIGENTNYM ZAPROSZENIEM ---
+def send_email_with_invite(subject, message, context_text):
     try:
         sender_email = st.secrets["GMAIL_USER"]
         sender_password = st.secrets["GMAIL_PASSWORD"]
         receiver_email = "artur.adamski@agroapp.com.pl"
         
-        # Tworzenie kontenera wiadomości
+        # Analiza daty z komunikatu
+        dates, times = extract_dates(context_text)
+        
+        # Próba ustawienia czasu startu na podstawie tekstu
+        start_dt = datetime.datetime.now() + datetime.timedelta(hours=1)
+        if dates and times:
+            try:
+                # Próba złożenia daty z pierwszej znalezionej pary
+                day, month = map(int, dates[0].split('.')[:2])
+                hour, minute = map(int, times[0].split(':'))
+                year = start_dt.year
+                start_dt = datetime.datetime(year, month, day, hour, minute)
+            except:
+                pass
+
         msg = MIMEMultipart()
         msg['Subject'] = subject
-        msg['From'] = f"Monitor Systemowy <{sender_email}>"
+        msg['From'] = f"Monitor e-Doręczeń <{sender_email}>"
         msg['To'] = receiver_email
-        msg.attach(MIMEText(message, 'plain'))
+        
+        body = f"{message}\n\nFRAGMENT KOMUNIKATU ZE STRONY:\n{context_text}"
+        msg.attach(MIMEText(body, 'plain'))
 
-        # Tworzenie treści zaproszenia .ics
-        end_dt = start_dt + datetime.timedelta(hours=2)
+        # Plik .ics (Zaproszenie)
+        end_dt = start_dt + datetime.timedelta(hours=4) # Domyślnie 4h przerwy
         ics_content = f"""BEGIN:VCALENDAR
 VERSION:2.0
-PRODID:-//Monitor Dashboard//PL
 BEGIN:VEVENT
-UID:{datetime.datetime.now().strftime('%Y%m%dT%H%M%S')}@monitor.com
-DTSTAMP:{datetime.datetime.now().strftime('%Y%m%dT%H%M%SZ')}
 DTSTART:{start_dt.strftime('%Y%m%dT%H%M%SZ')}
 DTEND:{end_dt.strftime('%Y%m%dT%H%M%SZ')}
-SUMMARY:Niedostępność E-Doręczeń (ALERT)
-DESCRIPTION:{message.replace('\\n', ' ')}
-LOCATION:Strony rządowe / Poczta Polska
+SUMMARY:PRZERWA: E-Doręczenia
+DESCRIPTION:{context_text[:200]}
 END:VEVENT
 END:VCALENDAR"""
 
-        # Dodawanie załącznika .ics
-        part = MIMEBase('text', 'calendar', method='REQUEST', name='zaproszenie.ics')
+        part = MIMEBase('text', 'calendar', method='REQUEST', name='termin_przerwy.ics')
         part.set_payload(ics_content)
         encoders.encode_base64(part)
-        part.add_header('Content-Disposition', 'attachment; filename="zaproszenie.ics"')
+        part.add_header('Content-Disposition', 'attachment; filename="termin_przerwy.ics"')
         msg.attach(part)
 
-        # Wysyłka
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(sender_email, sender_password)
             server.sendmail(sender_email, receiver_email, msg.as_string())
@@ -63,30 +86,28 @@ def check_service_status(url, keywords):
         response = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Filtr eArchiwum
-        for archive_div in soup.find_all(string=lambda text: "earchiwum" in text.lower()):
-            if archive_div.parent: archive_div.parent.extract()
+        # Usuwamy eArchiwum z analizy
+        for tag in soup.find_all(string=re.compile("earchiwum", re.I)):
+            if tag.parent: tag.parent.extract()
             
-        text = soup.get_text().lower()
-        found = [word for word in keywords if word in text]
+        text = soup.get_text()
+        text_lower = text.lower()
+        found = [word for word in keywords if word in text_lower]
         
         context = ""
         if found:
-            start_idx = text.find(found[0])
-            context = "..." + text[max(0, start_idx-60):min(len(text), start_idx+120)] + "..."
+            # Szukamy gdzie wystąpiło słowo kluczowe i bierzemy otoczenie (150 znaków)
+            idx = text_lower.find(found[0])
+            context = text[max(0, idx-50):min(len(text), idx+200)].strip()
             
         return (found, context) if found else (None, "")
     except:
         return ("Błąd połączenia", "")
 
-# --- LOGIKA GŁÓWNA ---
+# --- GŁÓWNY INTERFEJS ---
+st.title("📡 Smart Monitor e-Doręczeń")
 now = datetime.datetime.now()
-st.title("📡 System Monitorowania E-Doręczeń")
-st.write(f"Ostatnia weryfikacja: **{now.strftime('%H:%M:%S')}**")
 
-st.divider()
-
-# --- MONITORING (GÓRA) ---
 col_eda, col_edb = st.columns(2)
 sites = [
     {"name": "Poczta Polska", "url": "https://edoreczenia.poczta-polska.pl/informacje/prace-serwisowe/", "keywords": ["przerwa", "techniczna", "utrudnienia"]},
@@ -94,49 +115,30 @@ sites = [
 ]
 
 any_alert = False
-alert_summary = ""
 
 for i, site in enumerate(sites):
     status, context = check_service_status(site["url"], site["keywords"])
     with [col_eda, col_edb][i]:
         with st.container(border=True):
             st.subheader(site["name"])
-            if status == "Błąd połączenia":
-                st.warning("🟡 Problem z połączeniem")
-            elif status:
-                st.error(f"🔴 WYKRYTO ZMIANĘ: {', '.join(status)}")
-                st.info(f"**Kontekst:** {context}")
+            if status:
+                st.error(f"🔴 Wykryto komunikat!")
+                st.write(f"**Treść:** {context}")
+                
+                # Przycisk wysyłki ręcznej dla konkretnego komunikatu
+                if st.button(f"Wyślij to zaproszenie na agroapp", key=site['name']):
+                    res = send_email_with_invite(f"⚠️ Terminy przerwy: {site['name']}", "Szczegóły przerwy odczytane ze strony.", context)
+                    if res is True: st.success("Wysłano!")
+                    else: st.error(res)
                 any_alert = True
-                alert_summary += f"{site['name']}: {', '.join(status)}. "
             else:
-                st.success("🔵 System dostępny")
+                st.success("🔵 Brak utrudnień")
 
-# --- AKCJE AUTOMATYCZNE ---
-if any_alert and 'alert_sent' not in st.session_state:
-    # Wysyłka maila z zaproszeniem ICS
-    res = send_email_with_invite(
-        f"⚠️ ALERT: Przerwa e-Doręczenia ({now.strftime('%d.%m')})",
-        f"Wykryto utrudnienia. Szczegóły: {alert_summary}",
-        now
-    )
-    if res is True:
-        st.toast("Wysłano alert z zaproszeniem!", icon="📧")
-    st.session_state['alert_sent'] = True
+# --- AUTO-ALERT (Tylko raz na sesję) ---
+if any_alert and 'sent' not in st.session_state:
+    # Tutaj logika mogłaby automatycznie wysłać maila, 
+    # ale przycisk powyżej daje Ci kontrolę nad tym, co wysyłasz.
+    st.session_state['sent'] = True
 
 st.divider()
-
-# --- PANEL DOLNY ---
-c1, c2 = st.columns([2, 1])
-with c1:
-    st.header("⚙️ Narzędzia")
-    if st.button("Wyślij TESTOWE ZAPROSZENIE na agroapp.com.pl"):
-        send_email_with_invite("TEST: Zaproszenie z Monitora", "Test działania załącznika ICS.", now)
-        st.success("Testowe zaproszenie wysłane!")
-
-with c2:
-    with st.container(border=True):
-        st.subheader("💻 Stacja")
-        st.write("Dell Precision 5540 | i9")
-        st.progress(0.46)
-
-st.caption(f"v2.2 | Mail: artur.adamski@agroapp.com.pl | eArchiwum Ignored | ICS Support")
+st.caption(f"v2.3 | Adres: artur.adamski@agroapp.com.pl | Auto-Date Detection | No eArchiwum")
