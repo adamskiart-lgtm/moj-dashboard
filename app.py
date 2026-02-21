@@ -6,58 +6,41 @@ import smtplib
 import re
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from email.mime.base import MIMEBase
-from email import encoders
 from streamlit_calendar import calendar
 
-# --- 1. KONFIGURACJA I STYL ---
-st.set_page_config(page_title="E-Doręczenia Monitor PRO", layout="wide")
+# --- 1. KONFIGURACJA ---
+st.set_page_config(page_title="Operations Center PRO", layout="wide")
 
-# --- 2. LOGIKA REJESTRU PRZERW (LOKALNA BAZA) ---
-# Inicjalizacja listy przerw w pamięci aplikacji (tylko na tej stronie)
-if 'local_events' not in st.session_state:
-    st.session_state['local_events'] = []
-
-def add_to_local_calendar(title, context):
-    """Dodaje wpis do lokalnego kalendarza widocznego na stronie"""
-    now = datetime.datetime.now()
-    # Tworzymy unikalny klucz dla dzisiejszego wydarzenia, by nie dodawać go 100 razy
-    event_id = f"{now.strftime('%Y-%m-%d')}-{title[:5]}"
+# --- 2. DANE HISTORYCZNE I PLANOWANE (Z TWOJEJ TABELI) ---
+def get_gov_planned_events():
+    """Przetwarza dane z tabeli GOV na format kalendarza"""
+    planned_data = [
+        ("2026-03-01", "15:00", "20:00", "PPSA"),
+        ("2026-02-26", "18:00", "23:00", "PPSA"),
+        ("2026-02-18", "18:00", "23:00", "PPSA"),
+        ("2026-02-15", "15:00", "20:00", "PPSA"),
+        ("2026-02-08", "15:00", "20:00", "PPSA"),
+        ("2026-02-01", "15:00", "20:00", "PPSA"),
+        # Możesz tu dopisać kolejne daty z listy w formacie YYYY-MM-DD
+    ]
     
-    if not any(ev.get('id') == event_id for ev in st.session_state['local_events']):
-        new_event = {
-            "id": event_id,
-            "title": f"❌ {title}",
-            "start": now.strftime('%Y-%m-%dT%H:%M:%S'),
-            "end": (now + datetime.timedelta(hours=4)).strftime('%Y-%m-%dT%H:%M:%S'),
-            "backgroundColor": "#FF4B4B",
-            "description": context
-        }
-        st.session_state['local_events'].append(new_event)
+    events = []
+    for date, start_t, end_t, provider in planned_data:
+        events.append({
+            "title": f"🕒 Planowana: {provider}",
+            "start": f"{date}T{start_t}:00",
+            "end": f"{date}T{end_t}:00",
+            "backgroundColor": "#FFA500", # Pomarańczowy dla planowanych
+            "borderColor": "#CC8400"
+        })
+    return events
 
-# --- 3. FUNKCJE TECHNICZNE (SCRAPING, MAIL) ---
-def send_full_alert(subject, context_text):
-    try:
-        sender_email = st.secrets["GMAIL_USER"]
-        sender_password = st.secrets["GMAIL_PASSWORD"]
-        receiver_email = "artur.adamski@agroapp.com.pl"
-        msg = MIMEMultipart()
-        msg['Subject'] = subject
-        msg['From'] = f"Monitor Systemowy <{sender_email}>"
-        msg['To'] = receiver_email
-        msg.attach(MIMEText(f"Wykryto przerwę!\n\nTREŚĆ:\n{context_text}", 'plain'))
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(sender_email, sender_password)
-            server.sendmail(sender_email, receiver_email, msg.as_string())
-        return True
-    except: return False
-
+# --- 3. FUNKCJE MONITORINGU ---
 def check_status(url, keywords):
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
         res = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(res.text, 'html.parser')
-        # Filtr eArchiwum
         for t in soup.find_all(string=re.compile("earchiwum", re.I)):
             if t.parent: t.parent.extract()
         full_text = soup.get_text()
@@ -70,32 +53,18 @@ def check_status(url, keywords):
         return found, context
     except: return None, ""
 
-# --- 4. PASEK BOCZNY ---
+# --- 4. SIDEBAR ---
 with st.sidebar:
-    st.title("📂 Panel Sterowania")
-    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Oprogramowanie"])
+    st.title("📂 Panel")
+    choice = st.radio("Menu:", ["📡 e-Doręczenia", "💻 System i Soft"])
     st.divider()
-    if st.button("Czyść kalendarz przerw"):
-        st.session_state['local_events'] = []
-        st.rerun()
+    st.caption(f"v2.8 | Artur Adamski")
 
 # --- 5. WIDOKI ---
 if choice == "📡 e-Doręczenia":
     st.header("📡 Monitoring e-Doręczeń")
     
-    # --- WIDOK MIESIĘCZNY (TYLKO TUTAJ) ---
-    st.subheader("📅 Kalendarz Wykrytych Przerw")
-    calendar_options = {
-        "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth,dayGridWeek"},
-        "initialView": "dayGridMonth",
-        "locale": "pl",
-    }
-    calendar(events=st.session_state['local_events'], options=calendar_options)
-    
-    st.divider()
-    
-    # --- STATUS STRON ---
-    st.subheader("🕵️ Bieżący Status")
+    # GÓRA: Aktualny status
     col1, col2 = st.columns(2)
     sites = [
         {"name": "Poczta Polska", "url": "https://edoreczenia.poczta-polska.pl/informacje/prace-serwisowe/", "keywords": ["przerwa", "techniczna", "utrudnienia"]},
@@ -108,35 +77,39 @@ if choice == "📡 e-Doręczenia":
             with st.container(border=True):
                 st.subheader(site["name"])
                 if found:
-                    st.error(f"🔴 Wykryto: {', '.join(found)}")
-                    st.caption(context)
-                    # AUTOMATYCZNE DODANIE DO LOKALNEGO KALENDARZA
-                    add_to_local_calendar(site["name"], context)
-                    
-                    if st.button(f"Wyślij info na maila", key=site['name']):
-                        send_full_alert(f"Alert: {site['name']}", context)
-                        st.success("Wysłano!")
+                    st.error(f"🔴 Wykryto utrudnienia!")
+                    st.write(f"_{context}_")
                 else:
-                    st.success("🔵 System dostępny")
-
-elif choice == "💻 System i Oprogramowanie":
-    st.header("💻 Centrum Systemowe")
-    col_cpu, col_disk = st.columns(2)
-    with col_cpu:
-        with st.container(border=True):
-            st.subheader("Dell Precision 5540")
-            st.write("🚀 **Procesor:** i9-9880H | 🧠 **RAM:** 32 GB")
-    with col_disk:
-        with st.container(border=True):
-            st.subheader("Zasoby")
-            st.progress(0.46, text="Dysk C: 433GB wolne")
+                    st.success("🔵 Brak bieżących komunikatów")
 
     st.divider()
-    st.subheader("⚙️ Status Oprogramowania")
+
+    # DÓŁ: Kalendarz (Mniejszy)
+    st.subheader("📅 Harmonogram Niedostępności (Historyczne i Planowane)")
+    
+    # Łączymy wydarzenia wykryte w sesji z tymi z tabeli GOV
+    if 'session_alerts' not in st.session_state:
+        st.session_state['session_alerts'] = []
+    
+    all_calendar_events = get_gov_planned_events() + st.session_state['session_alerts']
+
+    calendar_options = {
+        "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth,listMonth"},
+        "initialView": "dayGridMonth",
+        "height": 450, # Zmniejszona wysokość kalendarza
+        "locale": "pl",
+        "buttonText": {"today": "Dziś", "month": "Miesiąc", "list": "Lista"}
+    }
+    
+    calendar(events=all_calendar_events, options=calendar_options)
+
+elif choice == "💻 System i Soft":
+    st.header("💻 Centrum Systemowe")
+    st.subheader("Dell Precision 5540 | i9 | 32GB RAM")
+    st.progress(0.46, text="Dysk C: 433GB wolne")
+    st.divider()
     st.table([
         {"Program": "Adobe Photoshop 2026", "Status": "⚠️ Update"},
         {"Program": "Adobe Lightroom Classic", "Status": "✅ OK"},
         {"Program": "Microsoft Edge", "Status": "✅ OK"}
     ])
-
-st.sidebar.caption(f"v2.7 | Rejestr Lokalny | eArchiwum Ignored")
