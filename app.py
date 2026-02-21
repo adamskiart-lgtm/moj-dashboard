@@ -97,4 +97,12 @@ if choice == "📡 e-Doręczenia":
 
     st.divider()
     st.subheader("📅 Harmonogram (Pobierany dynamicznie)")
-    calendar(events=get_dynamic_gov_
+    calendar(events=get_dynamic_gov_events(), options={
+        "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth"},
+        "initialView": "dayGridMonth", "height": 450, "locale": "pl", "displayEventTime": False
+    })
+
+elif choice == "💻 System i Soft":
+    st.header("💻 Centrum Systemowe")
+    st.info("Dell Precision 5540 | i9 | 32GB RAM")
+    st.table([{"Program": "Adobe Photoshop 2026", "Status": "⚠️ Update"}, {"Program": "Microsoft Edge", "Status": "✅ OK"}])
