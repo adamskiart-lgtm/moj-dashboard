@@ -85,4 +85,49 @@ def get_poczta_simple_alert():
 # --- 4. INTERFEJS ---
 with st.sidebar:
     st.title("📂 Menu")
-    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i
+    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v47")
+    st.divider()
+    st.write(f"**Wersja kodu:** v4.7")
+
+if choice == "📡 e-Doręczenia":
+    st.header("📡 Monitor e-Doręczeń")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("🕵️ Poczta Polska")
+        st.info(get_poczta_simple_alert())
+        st.markdown('<a href="https://edoreczenia.poczta-polska.pl/informacje/prace-serwisowe/" style="color: #007bff; text-decoration: none; font-weight: bold;">Strona Poczty Polskiej - Prace serwisowe</a>', unsafe_allow_html=True)
+
+    with col2:
+        st.subheader("🕵️ GOV.PL")
+        st.warning("Najnowsze ogłoszenia o planowanych przerwach w kalendarzu poniżej.")
+        st.markdown('<a href="https://www.gov.pl/web/e-doreczenia/niedostepnosc-uslugi-edoreczen" style="color: #007bff; text-decoration: none; font-weight: bold;">Strona GOV.PL - Niedostępność e-Doręczeń</a>', unsafe_allow_html=True)
+
+    st.divider()
+    st.subheader("📅 Harmonogram Planowany")
+    
+    # Renderowanie kalendarza i przechwytywanie kliknięcia
+    cal_data = calendar(
+        events=get_dynamic_gov_events(),
+        options={
+            "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth"},
+            "initialView": "dayGridMonth", 
+            "height": 450, 
+            "locale": "pl", 
+            "displayEventTime": False,
+            "selectable": True
+        }, 
+        key="calendar_v47"
+    )
+
+    # Logika wyświetlania szczegółów po kliknięciu
+    if "eventClick" in cal_data:
+        event = cal_data["eventClick"]["event"]
+        st.success(f"🔍 **Szczegóły zdarzenia:**")
+        st.write(f"**Podmiot:** {event['extendedProps']['provider']}")
+        st.write(f"**Data publikacji na GOV:** {event['extendedProps']['pub_date']}")
+
+elif choice == "💻 System i Soft":
+    st.header("💻 Centrum Systemowe")
+    st.info("Dell Precision 5540 | i9 | 32GB RAM")
+    st.table([{"Program": "Adobe Photoshop 2026", "Status": "⚠️ Update"}, {"Program": "Microsoft Edge", "Status": "✅ OK"}])
