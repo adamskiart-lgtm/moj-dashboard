@@ -9,13 +9,13 @@ from email.mime.text import MIMEText
 from streamlit_calendar import calendar
 
 # --- 1. KONFIGURACJA ---
-# Wersja kodu: v7.9 [2026-02-22]
+# Wersja kodu: v8.0 [2026-02-22]
 st.set_page_config(page_title="Operations Center PRO", layout="wide")
 
-# CSS: Czytelne metryki bez zawijania tekstu
+# CSS: Czytelne metryki bez zawijania tekstu (fix dla i9 i Quadro)
 st.markdown("""
     <style>
-    [data-testid="stMetricValue"] { font-size: 1.4rem !important; font-weight: 700; color: #1E3A8A; }
+    [data-testid="stMetricValue"] { font-size: 1.3rem !important; font-weight: 700; color: #1E3A8A; }
     [data-testid="stMetricLabel"] { font-size: 0.85rem !important; }
     .stDataFrame { font-size: 0.8rem !important; }
     </style>
@@ -95,9 +95,9 @@ run_daily_check(current_poczta)
 
 with st.sidebar:
     st.title("📂 Menu")
-    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v79")
+    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v80")
     st.divider()
-    st.write("**Wersja:** v7.9")
+    st.write("**Wersja:** v8.0")
 
 # --- 5. WIDOK: E-DORĘCZENIA (PRZYWRÓCONY) ---
 if choice == "📡 e-Doręczenia":
@@ -110,9 +110,12 @@ if choice == "📡 e-Doręczenia":
         st.subheader("🕵️ GOV.PL")
         st.warning("Przerwy widoczne w kalendarzu poniżej.")
     st.divider()
-    calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v79")
+    cal_data = calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v80")
+    if "eventClick" in cal_data:
+        ev = cal_data["eventClick"]["event"]
+        st.success(f"🔍 **Zgłosił:** {ev['extendedProps']['provider']} | **Publikacja:** {ev['extendedProps']['pub_date']}")
 
-# --- 6. WIDOK: SYSTEM I SOFT (NAPRAWA HARDWARE) ---
+# --- 6. WIDOK: SYSTEM I SOFT (FINALNA NAPRAWA SPRZĘTU) ---
 elif choice == "💻 System i Soft":
     st.header("💻 Audyt Sprzętowo-Programowy")
     
@@ -126,7 +129,6 @@ elif choice == "💻 System i Soft":
     }
 
     st.subheader("1. Wykonaj Raport (PowerShell Admin)")
-    # KOMENDA: Wymusza zapis w UTF-8, co eliminuje błąd N/A
     ps_cmd = (
         "powershell -Command \"Write-Output 'HARDWARE_DATA'; "
         "Write-Output ('MODEL:' + (Get-CimInstance Win32_ComputerSystem).Model); "
@@ -140,21 +142,28 @@ elif choice == "💻 System i Soft":
     st.code(ps_cmd, language='powershell')
 
     st.divider()
-    up = st.file_uploader("2. Wgraj raport z C:\\Test\\raport_systemowy.txt", type="txt", key="up_v79")
+    up = st.file_uploader("2. Wgraj raport z C:\\Test\\raport_systemowy.txt", type="txt", key="up_v80")
 
     if up:
-        # Dekodowanie z ignorowaniem błędnych znaków (częsty problem przy N/A)
-        raw_text = up.read().decode('utf-8', errors='ignore')
-        lines = raw_text.splitlines()
-        
+        # Dekodowanie odporne na błędy (Fix dla N/A)
+        raw_content = up.read()
+        try:
+            text = raw_content.decode('utf-8', errors='ignore')
+        except:
+            text = raw_content.decode('utf-16', errors='ignore')
+            
+        lines = text.splitlines()
         hw = {'Model': 'N/A', 'CPU': 'N/A', 'RAM': 'N/A', 'GPU': 'N/A'}
+        
+        # Agresywne przeszukiwanie linii
         for line in lines:
-            if "MODEL:" in line: hw['Model'] = line.split(':', 1)[1].strip()
-            if "CPU:" in line: hw['CPU'] = line.split(':', 1)[1].strip().split('@')[0]
-            if "RAM:" in line: hw['RAM'] = line.split(':', 1)[1].strip()
-            if "GPU:" in line: hw['GPU'] = line.split(':', 1)[1].strip()
+            line_up = line.upper()
+            if "MODEL:" in line_up: hw['Model'] = line.split(':', 1)[1].strip()
+            if "CPU:" in line_up: hw['CPU'] = line.split(':', 1)[1].strip().split('@')[0]
+            if "RAM:" in line_up: hw['RAM'] = line.split(':', 1)[1].strip()
+            if "GPU:" in line_up: hw['GPU'] = line.split(':', 1)[1].strip()
 
-        st.success("✅ Dane sprzętowe wczytane:")
+        st.success("✅ Dane sprzętowe wczytane pomyślnie!")
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Maszyna", hw['Model'])
         c2.metric("Procesor", hw['CPU'])
@@ -166,7 +175,7 @@ elif choice == "💻 System i Soft":
         # ANALIZA PROGRAMÓW
         results, updates = [], []
         for line in lines:
-            if any(x in line for x in ["HARDWARE", "SOFTWARE", "MODEL:", "CPU:", "RAM:", "GPU:", "DisplayName"]): continue
+            if any(x in line.upper() for x in ["HARDWARE", "SOFTWARE", "MODEL:", "CPU:", "RAM:", "GPU:", "DISPLAYNAME"]): continue
             parts = re.split(r'\s{2,}', line.strip())
             if len(parts) >= 1 and len(parts[0]) > 2:
                 name, ver = parts[0], (parts[1] if len(parts) > 1 else "---")
@@ -183,7 +192,8 @@ elif choice == "💻 System i Soft":
                 results.append({"Program": name, "Wersja": ver, "Status": status})
 
         if results:
-            st.dataframe(pd.DataFrame(results).drop_duplicates().sort_values(by="Program"), use_container_width=True, hide_index=True)
+            df = pd.DataFrame(results).drop_duplicates().sort_values(by="Program")
+            st.dataframe(df, use_container_width=True, hide_index=True)
             if updates:
                 st.subheader("🚀 Instrukcja Aktualizacji")
                 for itm in updates: st.warning(f"**{itm['n']}** ➔ [Pobierz stąd]({itm['u']})")
