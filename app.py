@@ -9,18 +9,15 @@ from email.mime.text import MIMEText
 from streamlit_calendar import calendar
 
 # --- 1. KONFIGURACJA ---
-# Wersja kodu: v7.1 [2026-02-22]
+# Wersja kodu: v7.2 [2026-02-22]
 st.set_page_config(page_title="Operations Center PRO", layout="wide")
 
-# --- CSS: ZMNIEJSZENIE CZCIONKI METRYK ---
+# --- CSS: ZMNIEJSZENIE CZCIONKI DLA PEŁNEJ CZYTELNOŚCI ---
 st.markdown("""
     <style>
-    [data-testid="stMetricValue"] {
-        font-size: 1.8rem !important;
-    }
-    [data-testid="stMetricLabel"] {
-        font-size: 0.9rem !important;
-    }
+    [data-testid="stMetricValue"] { font-size: 1.5rem !important; }
+    [data-testid="stMetricLabel"] { font-size: 0.8rem !important; }
+    .stTable { font-size: 0.85rem !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -99,9 +96,9 @@ run_daily_check(current_poczta)
 
 with st.sidebar:
     st.title("📂 Menu")
-    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v71")
+    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v72")
     st.divider()
-    st.write("**Wersja:** v7.1")
+    st.write("**Wersja:** v7.2")
 
 # --- 5. WIDOK: E-DORĘCZENIA (ZAMROŻONY) ---
 if choice == "📡 e-Doręczenia":
@@ -110,15 +107,13 @@ if choice == "📡 e-Doręczenia":
     with col1:
         st.subheader("🕵️ Poczta Polska")
         st.info(current_poczta)
-        st.markdown('<a href="https://edoreczenia.poczta-polska.pl/informacje/prace-serwisowe/" style="color:#007bff;font-weight:bold;">Strona Poczty Polskiej</a>', unsafe_allow_html=True)
     with col2:
         st.subheader("🕵️ GOV.PL")
         st.warning("Przerwy widoczne w kalendarzu poniżej.")
-        st.markdown('<a href="https://www.gov.pl/web/e-doreczenia/niedostepnosc-uslugi-edoreczen" style="color:#007bff;font-weight:bold;">Strona GOV.PL</a>', unsafe_allow_html=True)
     st.divider()
-    calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v71")
+    calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v72")
 
-# --- 6. WIDOK: SYSTEM I SOFT (ONE-CLICK & AUTO-CLOSE) ---
+# --- 6. WIDOK: SYSTEM I SOFT (NAPRAWIONY ODCZYT & UI) ---
 elif choice == "💻 System i Soft":
     st.header("💻 Audyt Sprzętowo-Programowy")
     
@@ -131,71 +126,71 @@ elif choice == "💻 System i Soft":
         "NVIDIA": {"target": "550", "url": "https://www.nvidia.pl/Download/index.aspx?lang=pl"}
     }
 
-    st.subheader("1. Wykonaj Raport (Kopiuj i wklej do PowerShell)")
-    # KOMENDA: Generuje raport i zamyka okno (exit)
-    ps_command = (
-        "powershell -Command \"$hw = @{ 'Model' = (Get-CimInstance Win32_ComputerSystem).Model; "
-        "'CPU' = (Get-CimInstance Win32_Processor).Name; "
-        "'RAM' = \\\"$([Math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB)) GB\\\"; "
-        "'GPU' = (Get-CimInstance Win32_VideoController).Name }; "
-        "$hw.GetEnumerator() | ForEach-Object { \\\"$($_.Key): $($_.Value)\\\" } | Out-File 'C:\\Test\\raport_systemowy.txt' -Encoding utf8; "
-        "Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | "
-        "Select-Object DisplayName, DisplayVersion | Format-List | Out-File 'C:\\Test\\raport_systemowy.txt' -Append -Encoding utf8; "
-        "exit\""
+    st.subheader("1. Kopiuj i wklej do PowerShell (Admin)")
+    # SKRYPT: Zbiera dane, zapisuje i sam się zamyka
+    ps_final = (
+        "$h = @{" +
+        "'Model'=(Get-CimInstance Win32_ComputerSystem).Model;" +
+        "'CPU'=(Get-CimInstance Win32_Processor).Name;" +
+        "'RAM'=\"$([Math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB)) GB\";" +
+        "'GPU'=(Get-CimInstance Win32_VideoController).Name" +
+        "}; " +
+        "$h.GetEnumerator() | ForEach-Object { \"$($_.Key): $($_.Value)\" } | Out-File 'C:\\Test\\raport_systemowy.txt' -Encoding utf8; " +
+        "Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | " +
+        "Select-Object DisplayName, DisplayVersion | Format-List | Out-File 'C:\\Test\\raport_systemowy.txt' -Append -Encoding utf8; " +
+        "exit"
     )
-    st.code(ps_command, language='powershell')
-    st.caption("💡 Po uruchomieniu raportu okno konsoli zamknie się automatycznie.")
+    st.code(ps_final, language='powershell')
 
     st.divider()
-    up = st.file_uploader("Wgraj raport z C:\\Test\\raport_systemowy.txt", type="txt", key="up_v71")
+    up = st.file_uploader("2. Wgraj raport z C:\\Test\\raport_systemowy.txt", type="txt", key="up_v72")
 
     if up:
         raw_text = up.read().decode('utf-8', errors='ignore')
-        st.success("✅ Raport wczytany!")
+        st.success("✅ Dane sprzętowe i programowe wczytane.")
         
-        # --- ODCZYT SPRZĘTU ---
+        # ODCZYT SPRZĘTU
         hw = {'Model': 'N/A', 'CPU': 'N/A', 'RAM': 'N/A', 'GPU': 'N/A'}
         lines = raw_text.splitlines()
         for line in lines:
-            if ":" in line:
-                key_part = line.split(":")[0].strip()
-                val_part = line.split(":")[1].strip()
-                if key_part in hw: hw[key_part] = val_part
+            if ":" in line and "=" not in line:
+                k, v = line.split(":", 1)[0].strip(), line.split(":", 1)[1].strip()
+                if k in hw: hw[k] = v
 
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Model Maszyny", hw['Model'])
+        c1.metric("Maszyna", hw['Model'])
         c2.metric("Procesor", hw['CPU'].split('@')[0].strip())
-        c3.metric("Pamięć RAM", hw['RAM'])
-        c4.metric("Karta Graficzna", hw['GPU'])
+        c3.metric("RAM", hw['RAM'])
+        c4.metric("Grafika", hw['GPU'])
         
         st.divider()
         
-        # --- ANALIZA PROGRAMÓW ---
+        # ANALIZA PROGRAMÓW
         results = []
         updates = []
-        current_name = ""
+        cur_name = ""
         for line in lines:
-            if "DisplayName :" in line: current_name = line.split(":")[-1].strip()
-            if "DisplayVersion :" in line and current_name:
+            if "DisplayName :" in line: cur_name = line.split(":")[-1].strip()
+            if "DisplayVersion :" in line and cur_name:
                 ver = line.split(":")[-1].strip()
                 status = "✅ OK"
                 for key, meta in app_meta.items():
-                    if key.lower() in current_name.lower():
+                    if key.lower() in cur_name.lower():
                         try:
                             if float(ver.split('.')[0]) < float(meta["target"].split('.')[0]):
-                                status = f"⚠️ Update do {meta['target']}"
-                                updates.append({"name": current_name, "url": meta["url"]})
+                                status = f"⚠️ Update"
+                                updates.append({"name": cur_name, "url": meta["url"]})
                         except: pass
-                results.append({"Program": current_name, "Wersja": ver, "Status": status})
-                current_name = ""
+                results.append({"Program": cur_name, "Wersja": ver, "Status": status})
+                cur_name = ""
         
         if results:
             df = pd.DataFrame(results).drop_duplicates().sort_values(by="Program")
-            st.subheader("📋 Wykryte Oprogramowanie")
             st.dataframe(df, use_container_width=True, hide_index=True)
             
             if updates:
                 st.divider()
                 st.subheader("🚀 Instrukcja Aktualizacji")
-                for item in updates:
-                    st.warning(f"**{item['name']}** ➔ [Pobierz stąd]({item['url']})")
+                for itm in updates:
+                    st.warning(f"**{itm['name']}** ➔ [Link do pobrania]({itm['url']})")
+            
