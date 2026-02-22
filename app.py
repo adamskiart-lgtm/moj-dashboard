@@ -9,10 +9,10 @@ from email.mime.text import MIMEText
 from streamlit_calendar import calendar
 
 # --- 1. KONFIGURACJA ---
-# Wersja kodu: v7.8 [2026-02-22]
+# Wersja kodu: v7.9 [2026-02-22]
 st.set_page_config(page_title="Operations Center PRO", layout="wide")
 
-# CSS: Czytelne metryki i mniejsza czcionka tabeli
+# CSS: Czytelne metryki bez zawijania tekstu
 st.markdown("""
     <style>
     [data-testid="stMetricValue"] { font-size: 1.4rem !important; font-weight: 700; color: #1E3A8A; }
@@ -95,9 +95,9 @@ run_daily_check(current_poczta)
 
 with st.sidebar:
     st.title("📂 Menu")
-    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v78")
+    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v79")
     st.divider()
-    st.write("**Wersja:** v7.8")
+    st.write("**Wersja:** v7.9")
 
 # --- 5. WIDOK: E-DORĘCZENIA (PRZYWRÓCONY) ---
 if choice == "📡 e-Doręczenia":
@@ -106,18 +106,13 @@ if choice == "📡 e-Doręczenia":
     with col1:
         st.subheader("🕵️ Poczta Polska")
         st.info(current_poczta)
-        st.markdown('<a href="https://edoreczenia.poczta-polska.pl/informacje/prace-serwisowe/" style="color:#007bff;font-weight:bold;">Strona Poczty Polskiej</a>', unsafe_allow_html=True)
     with col2:
         st.subheader("🕵️ GOV.PL")
         st.warning("Przerwy widoczne w kalendarzu poniżej.")
-        st.markdown('<a href="https://www.gov.pl/web/e-doreczenia/niedostepnosc-uslugi-edoreczen" style="color:#007bff;font-weight:bold;">Strona GOV.PL</a>', unsafe_allow_html=True)
     st.divider()
-    cal_data = calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v78")
-    if "eventClick" in cal_data:
-        ev = cal_data["eventClick"]["event"]
-        st.success(f"🔍 **Zgłosił:** {ev['extendedProps']['provider']} | **Publikacja:** {ev['extendedProps']['pub_date']}")
+    calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v79")
 
-# --- 6. WIDOK: SYSTEM I SOFT (FINALNA NAPRAWA SPRZĘTU) ---
+# --- 6. WIDOK: SYSTEM I SOFT (NAPRAWA HARDWARE) ---
 elif choice == "💻 System i Soft":
     st.header("💻 Audyt Sprzętowo-Programowy")
     
@@ -131,42 +126,35 @@ elif choice == "💻 System i Soft":
     }
 
     st.subheader("1. Wykonaj Raport (PowerShell Admin)")
-    # NOWA KOMENDA - Zmiana zapisu na ASCII (najbezpieczniejszy format tekstowy)
+    # KOMENDA: Wymusza zapis w UTF-8, co eliminuje błąd N/A
     ps_cmd = (
-        "powershell -Command \"Write-Output 'MODEL:' (Get-CimInstance Win32_ComputerSystem).Model | Out-File C:\\Test\\raport_systemowy.txt -Encoding ascii; "
-        "Write-Output 'CPU:' (Get-CimInstance Win32_Processor).Name | Out-File C:\\Test\\raport_systemowy.txt -Append -Encoding ascii; "
-        "Write-Output 'RAM:' ((Get-CimInstance Win32_PhysicalMemory | Measure-Object Capacity -Sum).Sum / 1GB) 'GB' | Out-File C:\\Test\\raport_systemowy.txt -Append -Encoding ascii; "
-        "Write-Output 'GPU:' (Get-CimInstance Win32_VideoController).Name | Out-File C:\\Test\\raport_systemowy.txt -Append -Encoding ascii; "
+        "powershell -Command \"Write-Output 'HARDWARE_DATA'; "
+        "Write-Output ('MODEL:' + (Get-CimInstance Win32_ComputerSystem).Model); "
+        "Write-Output ('CPU:' + (Get-CimInstance Win32_Processor).Name); "
+        "Write-Output ('RAM:' + [Math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object Capacity -Sum).Sum / 1GB) + ' GB'); "
+        "Write-Output ('GPU:' + (Get-CimInstance Win32_VideoController).Name); "
+        "Write-Output 'SOFTWARE_DATA'; "
         "Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | "
-        "Select-Object DisplayName, DisplayVersion | Out-File C:\\Test\\raport_systemowy.txt -Append -Encoding ascii; exit\""
+        "Select-Object DisplayName, DisplayVersion | Out-File C:\\Test\\raport_systemowy.txt -Encoding utf8; exit\""
     )
     st.code(ps_cmd, language='powershell')
 
     st.divider()
-    up = st.file_uploader("2. Wgraj raport z C:\\Test\\raport_systemowy.txt", type="txt", key="up_v78")
+    up = st.file_uploader("2. Wgraj raport z C:\\Test\\raport_systemowy.txt", type="txt", key="up_v79")
 
     if up:
-        # Odczytujemy plik próbując różnych kodowań
-        raw_bytes = up.read()
-        encodings = ['ascii', 'utf-8', 'utf-16']
-        text = ""
-        for enc in encodings:
-            try:
-                text = raw_bytes.decode(enc)
-                if "MODEL:" in text: break
-            except: continue
-            
-        lines = text.splitlines()
-        hw = {'Model': 'N/A', 'CPU': 'N/A', 'RAM': 'N/A', 'GPU': 'N/A'}
+        # Dekodowanie z ignorowaniem błędnych znaków (częsty problem przy N/A)
+        raw_text = up.read().decode('utf-8', errors='ignore')
+        lines = raw_text.splitlines()
         
+        hw = {'Model': 'N/A', 'CPU': 'N/A', 'RAM': 'N/A', 'GPU': 'N/A'}
         for line in lines:
-            l_up = line.upper()
-            if "MODEL:" in l_up: hw['Model'] = line.split(':', 1)[1].strip()
-            elif "CPU:" in l_up: hw['CPU'] = line.split(':', 1)[1].strip().split('@')[0]
-            elif "RAM:" in l_up: hw['RAM'] = line.split(':', 1)[1].strip()
-            elif "GPU:" in l_up: hw['GPU'] = line.split(':', 1)[1].strip()
+            if "MODEL:" in line: hw['Model'] = line.split(':', 1)[1].strip()
+            if "CPU:" in line: hw['CPU'] = line.split(':', 1)[1].strip().split('@')[0]
+            if "RAM:" in line: hw['RAM'] = line.split(':', 1)[1].strip()
+            if "GPU:" in line: hw['GPU'] = line.split(':', 1)[1].strip()
 
-        st.success("✅ Dane sprzętowe:")
+        st.success("✅ Dane sprzętowe wczytane:")
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Maszyna", hw['Model'])
         c2.metric("Procesor", hw['CPU'])
@@ -175,9 +163,10 @@ elif choice == "💻 System i Soft":
         
         st.divider()
         
+        # ANALIZA PROGRAMÓW
         results, updates = [], []
         for line in lines:
-            if any(x in line.upper() for x in ["MODEL:", "CPU:", "RAM:", "GPU:", "DISPLAYNAME"]): continue
+            if any(x in line for x in ["HARDWARE", "SOFTWARE", "MODEL:", "CPU:", "RAM:", "GPU:", "DisplayName"]): continue
             parts = re.split(r'\s{2,}', line.strip())
             if len(parts) >= 1 and len(parts[0]) > 2:
                 name, ver = parts[0], (parts[1] if len(parts) > 1 else "---")
@@ -185,17 +174,16 @@ elif choice == "💻 System i Soft":
                 for key, meta in app_meta.items():
                     if key.lower() in name.lower():
                         try:
-                            curr_v = int(re.search(r'\d+', ver).group())
-                            target_v = int(re.search(r'\d+', meta["target"]).group())
-                            if curr_v < target_v:
+                            v_num = int(re.search(r'\d+', ver).group())
+                            t_num = int(re.search(r'\d+', meta["target"]).group())
+                            if v_num < t_num:
                                 status = f"⚠️ Update do {meta['target']}"
                                 updates.append({"n": name, "u": meta["url"]})
                         except: pass
                 results.append({"Program": name, "Wersja": ver, "Status": status})
 
         if results:
-            df = pd.DataFrame(results).drop_duplicates().sort_values(by="Program")
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(results).drop_duplicates().sort_values(by="Program"), use_container_width=True, hide_index=True)
             if updates:
                 st.subheader("🚀 Instrukcja Aktualizacji")
                 for itm in updates: st.warning(f"**{itm['n']}** ➔ [Pobierz stąd]({itm['u']})")
