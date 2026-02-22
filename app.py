@@ -9,14 +9,14 @@ from email.mime.text import MIMEText
 from streamlit_calendar import calendar
 
 # --- 1. KONFIGURACJA ---
-# Wersja kodu: v8.0 [2026-02-22]
+# Wersja kodu: v8.1 [2026-02-22]
 st.set_page_config(page_title="Operations Center PRO", layout="wide")
 
-# CSS: Czytelne metryki bez zawijania tekstu (fix dla i9 i Quadro)
+# CSS: Czytelne metryki bez zawijania tekstu (zmniejszona czcionka dla i9 i Quadro)
 st.markdown("""
     <style>
-    [data-testid="stMetricValue"] { font-size: 1.3rem !important; font-weight: 700; color: #1E3A8A; }
-    [data-testid="stMetricLabel"] { font-size: 0.85rem !important; }
+    [data-testid="stMetricValue"] { font-size: 1.25rem !important; font-weight: 700; color: #1E3A8A; }
+    [data-testid="stMetricLabel"] { font-size: 0.8rem !important; }
     .stDataFrame { font-size: 0.8rem !important; }
     </style>
     """, unsafe_allow_html=True)
@@ -95,9 +95,9 @@ run_daily_check(current_poczta)
 
 with st.sidebar:
     st.title("📂 Menu")
-    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v80")
+    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v81")
     st.divider()
-    st.write("**Wersja:** v8.0")
+    st.write("**Wersja:** v8.1")
 
 # --- 5. WIDOK: E-DORĘCZENIA (PRZYWRÓCONY) ---
 if choice == "📡 e-Doręczenia":
@@ -110,12 +110,12 @@ if choice == "📡 e-Doręczenia":
         st.subheader("🕵️ GOV.PL")
         st.warning("Przerwy widoczne w kalendarzu poniżej.")
     st.divider()
-    cal_data = calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v80")
+    cal_data = calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v81")
     if "eventClick" in cal_data:
         ev = cal_data["eventClick"]["event"]
         st.success(f"🔍 **Zgłosił:** {ev['extendedProps']['provider']} | **Publikacja:** {ev['extendedProps']['pub_date']}")
 
-# --- 6. WIDOK: SYSTEM I SOFT (FINALNA NAPRAWA SPRZĘTU) ---
+# --- 6. WIDOK: SYSTEM I SOFT (FINALNA NAPRAWA ODCZYTU) ---
 elif choice == "💻 System i Soft":
     st.header("💻 Audyt Sprzętowo-Programowy")
     
@@ -129,41 +129,42 @@ elif choice == "💻 System i Soft":
     }
 
     st.subheader("1. Wykonaj Raport (PowerShell Admin)")
+    # KOMENDA: Wykorzystuje czysty zapis tekstowy
     ps_cmd = (
-        "powershell -Command \"Write-Output 'HARDWARE_DATA'; "
+        "powershell -Command \"Write-Output '---HARDWARE---'; "
         "Write-Output ('MODEL:' + (Get-CimInstance Win32_ComputerSystem).Model); "
         "Write-Output ('CPU:' + (Get-CimInstance Win32_Processor).Name); "
         "Write-Output ('RAM:' + [Math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object Capacity -Sum).Sum / 1GB) + ' GB'); "
         "Write-Output ('GPU:' + (Get-CimInstance Win32_VideoController).Name); "
-        "Write-Output 'SOFTWARE_DATA'; "
+        "Write-Output '---SOFTWARE---'; "
         "Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | "
         "Select-Object DisplayName, DisplayVersion | Out-File C:\\Test\\raport_systemowy.txt -Encoding utf8; exit\""
     )
     st.code(ps_cmd, language='powershell')
 
     st.divider()
-    up = st.file_uploader("2. Wgraj raport z C:\\Test\\raport_systemowy.txt", type="txt", key="up_v80")
+    up = st.file_uploader("2. Wgraj raport z C:\\Test\\raport_systemowy.txt", type="txt", key="up_v81")
 
     if up:
-        # Dekodowanie odporne na błędy (Fix dla N/A)
-        raw_content = up.read()
+        # Dekodowanie odporne na błędy formatowania
+        raw_bytes = up.read()
         try:
-            text = raw_content.decode('utf-8', errors='ignore')
+            text = raw_bytes.decode('utf-8', errors='ignore')
         except:
-            text = raw_content.decode('utf-16', errors='ignore')
+            text = raw_bytes.decode('utf-16', errors='ignore')
             
         lines = text.splitlines()
         hw = {'Model': 'N/A', 'CPU': 'N/A', 'RAM': 'N/A', 'GPU': 'N/A'}
         
-        # Agresywne przeszukiwanie linii
+        # Agresywne przeszukiwanie całego pliku w poszukiwaniu danych sprzętowych
         for line in lines:
-            line_up = line.upper()
+            line_up = line.upper().strip()
             if "MODEL:" in line_up: hw['Model'] = line.split(':', 1)[1].strip()
-            if "CPU:" in line_up: hw['CPU'] = line.split(':', 1)[1].strip().split('@')[0]
-            if "RAM:" in line_up: hw['RAM'] = line.split(':', 1)[1].strip()
-            if "GPU:" in line_up: hw['GPU'] = line.split(':', 1)[1].strip()
+            elif "CPU:" in line_up: hw['CPU'] = line.split(':', 1)[1].strip().split('@')[0].strip()
+            elif "RAM:" in line_up: hw['RAM'] = line.split(':', 1)[1].strip()
+            elif "GPU:" in line_up: hw['GPU'] = line.split(':', 1)[1].strip()
 
-        st.success("✅ Dane sprzętowe wczytane pomyślnie!")
+        st.success("✅ Dane wczytane pomyślnie!")
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Maszyna", hw['Model'])
         c2.metric("Procesor", hw['CPU'])
@@ -175,7 +176,9 @@ elif choice == "💻 System i Soft":
         # ANALIZA PROGRAMÓW
         results, updates = [], []
         for line in lines:
-            if any(x in line.upper() for x in ["HARDWARE", "SOFTWARE", "MODEL:", "CPU:", "RAM:", "GPU:", "DISPLAYNAME"]): continue
+            # Ignorujemy sekcję hardware i puste linie
+            if any(x in line.upper() for x in ["HARDWARE", "MODEL:", "CPU:", "RAM:", "GPU:", "---"]): continue
+            
             parts = re.split(r'\s{2,}', line.strip())
             if len(parts) >= 1 and len(parts[0]) > 2:
                 name, ver = parts[0], (parts[1] if len(parts) > 1 else "---")
