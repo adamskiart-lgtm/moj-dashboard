@@ -48,4 +48,41 @@ with st.sidebar:
 if choice == "📡 e-Doręczenia":
     st.header("📡 Monitor e-Doręczeń")
     st.info("Sekcja zamrożona.")
-    calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEvent
+    calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v59")
+
+elif choice == "💻 System i Soft":
+    st.header("💻 Centrum Zarządzania Oprogramowaniem")
+    
+    st.subheader("1. Wygeneruj listę")
+    st.code('Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | Select-Object DisplayName, DisplayVersion | Out-File "C:\\Test\\moje_programy.txt"', language='powershell')
+    
+    st.divider()
+    
+    st.subheader("2. Wgraj plik do analizy")
+    
+    # Podpowiedź ścieżki
+    st.write("💡 **Wskazówka:** Po kliknięciu w przycisk poniżej, wklej tę ścieżkę w polu nazwy pliku, aby szybko tam przejść:")
+    st.code("C:\\Test\\", language="text")
+    
+    up = st.file_uploader("Wybierz plik moje_programy.txt", type="txt")
+    
+    if up:
+        raw = up.read()
+        try: text = raw.decode('utf-16')
+        except: text = raw.decode('utf-8')
+            
+        apps = []
+        for line in text.splitlines():
+            if line.strip() and "----" not in line and "DisplayName" not in line:
+                parts = re.split(r'\s{2,}', line.strip())
+                if len(parts) >= 1:
+                    apps.append({"Oprogramowanie": parts[0], "Wersja": parts[1] if len(parts) > 1 else "---"})
+        
+        if apps:
+            df = pd.DataFrame(apps).drop_duplicates().sort_values(by="Oprogramowanie")
+            search = st.text_input("🔍 Filtruj listę (np. Norton, Epic, Java):")
+            if search:
+                df = df[df['Oprogramowanie'].str.contains(search, case=False, na=False)]
+            st.dataframe(df, use_container_width=True, hide_index=True)
+    else:
+        st.info("Czekam na plik z folderu C:\\Test\\")
