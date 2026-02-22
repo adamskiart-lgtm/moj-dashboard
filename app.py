@@ -88,4 +88,60 @@ if choice == "📡 e-Doręczenia":
         st.warning("Przerwy widoczne w kalendarzu poniżej.")
         st.markdown('<a href="https://www.gov.pl/web/e-doreczenia/niedostepnosc-uslugi-edoreczen" style="color:#007bff;font-weight:bold;">Strona GOV.PL</a>', unsafe_allow_html=True)
     st.divider()
-    cal_data = calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl
+    cal_data = calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="calendar_v60")
+    if "eventClick" in cal_data:
+        ev = cal_data["eventClick"]["event"]
+        st.success(f"🔍 **Zgłosił:** {ev['extendedProps']['provider']} | **Publikacja:** {ev['extendedProps']['pub_date']}")
+
+# --- 4. SYSTEM I SOFT - PEŁNA WERYFIKACJA ---
+elif choice == "💻 System i Soft":
+    st.header("💻 Audyt Oprogramowania Systemowego")
+    
+    # Baza najnowszych wersji do weryfikacji
+    latest_versions = {
+        "Adobe Photoshop": "27.3", "Norton 360": "22.24", "Epic Games": "15.0", 
+        "Java": "8.0", "Edge": "145", "Total Commander": "10.0", "Fortnite": "28.0"
+    }
+
+    st.subheader("1. Generowanie danych")
+    st.code('Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | Select-Object DisplayName, DisplayVersion | Out-File "C:\\Test\\moje_programy.txt"', language='powershell')
+    
+    st.divider()
+    
+    st.subheader("2. Weryfikacja plików")
+    st.code("C:\\Test\\", language="text")
+    up = st.file_uploader("Wgraj plik moje_programy.txt", type="txt", key="up_v60")
+    
+    if up:
+        raw = up.read()
+        try: text = raw.decode('utf-16')
+        except: text = raw.decode('utf-8')
+            
+        audit_results = []
+        for line in text.splitlines():
+            if line.strip() and "----" not in line and "DisplayName" not in line:
+                parts = re.split(r'\s{2,}', line.strip())
+                if len(parts) >= 1:
+                    name = parts[0]
+                    version = parts[1] if len(parts) > 1 else "---"
+                    
+                    # Weryfikacja aktualności
+                    status = "✅ Zainstalowano"
+                    for key, v_target in latest_versions.items():
+                        if key.lower() in name.lower():
+                            try:
+                                if float(version.split('.')[0]) < float(v_target.split('.')[0]):
+                                    status = f"⚠️ Wymagany Update ({v_target})"
+                                else:
+                                    status = "✅ Aktualny"
+                            except: status = "✅ Zweryfikowano"
+                            break
+                            
+                    audit_results.append({"Oprogramowanie": name, "Twoja Wersja": version, "Status": status})
+        
+        if audit_results:
+            df = pd.DataFrame(audit_results).drop_duplicates().sort_values(by="Oprogramowanie")
+            st.success(f"Przeskanowano {len(df)} pozycji.")
+            st.dataframe(df, use_container_width=True, hide_index=True)
+    else:
+        st.info("Wgraj plik z C:\\Test\\, aby przeprowadzić audyt wersji.")
