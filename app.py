@@ -99,15 +99,65 @@ if choice == "📡 e-Doręczenia":
     with col1:
         st.subheader("🕵️ Poczta Polska")
         st.info(current_poczta)
-        st.markdown('[➔ Strona Poczty Polskiej](https://edoreczenia.poczta-polska.pl/informacje/prace-serwisowe/)')
+        st.markdown('<a href="https://edoreczenia.poczta-polska.pl/informacje/prace-serwisowe/" style="color:#007bff;font-weight:bold;">Strona Poczty Polskiej</a>', unsafe_allow_html=True)
     with col2:
         st.subheader("🕵️ GOV.PL")
         st.warning("Przerwy widoczne w kalendarzu poniżej.")
-        st.markdown('[➔ Strona GOV.PL](https://www.gov.pl/web/e-doreczenia/niedostepnosc-uslugi-edoreczen)')
+        st.markdown('<a href="https://www.gov.pl/web/e-doreczenia/niedostepnosc-uslugi-edoreczen" style="color:#007bff;font-weight:bold;">Strona GOV.PL</a>', unsafe_allow_html=True)
     st.divider()
     cal_data = calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v66")
     if "eventClick" in cal_data:
         ev = cal_data["eventClick"]["event"]
         st.success(f"🔍 **Zgłosił:** {ev['extendedProps']['provider']} | **Publikacja:** {ev['extendedProps']['pub_date']}")
 
-# --- 6. WIDOK: SYSTEM I SOFT (NOWY SKANER) ---
+# --- 6. WIDOK: SYSTEM I SOFT ---
+elif choice == "💻 System i Soft":
+    st.header("💻 Audyt Sprzętowo-Programowy")
+    
+    st.subheader("1. Generuj raport zbiorczy")
+    st.write("Wklej w PowerShell (Administrator):")
+    ps_script = '$info = @{Model=(Get-CimInstance Win32_ComputerSystem).Model; CPU=(Get-CimInstance Win32_Processor).Name; RAM="$([Math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB)) GB"; GPU=(Get-CimInstance Win32_VideoController).Name}; $info | Out-File "C:\\Test\\raport_systemowy.txt"; Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | Select-Object DisplayName, DisplayVersion | Out-File "C:\\Test\\raport_systemowy.txt" -Append'
+    st.code(ps_script, language='powershell')
+
+    st.divider()
+    st.subheader("2. Wgraj i analizuj")
+    st.write("Wskazówka: Plik znajdziesz w `C:\\Test\\raport_systemowy.txt`")
+    up = st.file_uploader("Wgraj raport_systemowy.txt", type="txt", key="up_v66")
+
+    if up:
+        raw = up.read()
+        try: text = raw.decode('utf-16')
+        except: text = raw.decode('utf-8')
+
+        # Wyciąganie Hardware
+        m_model = re.search(r'Model\s+=\s+(.*)', text)
+        m_cpu = re.search(r'CPU\s+=\s+(.*)', text)
+        m_ram = re.search(r'RAM\s+=\s+(.*)', text)
+        m_gpu = re.search(r'GPU\s+=\s+(.*)', text)
+
+        if m_model:
+            st.info(f"💻 **Jednostka:** {m_model.group(1)} | {m_cpu.group(1) if m_cpu else 'N/A'}")
+            st.write(f"🚀 **Zasoby:** RAM: {m_ram.group(1) if m_ram else 'N/A'} | GPU: {m_gpu.group(1) if m_gpu else 'N/A'}")
+        
+        # Wyciąganie Software i weryfikacja
+        app_meta = {"Adobe Photoshop": "27.0", "Norton": "22.0", "Epic Games": "15.0", "Fortnite": "28.0", "Java": "8.0"}
+        results = []
+        for line in text.splitlines():
+            if line.strip() and "=" not in line and "DisplayName" not in line:
+                parts = re.split(r'\s{2,}', line.strip())
+                if len(parts) >= 1:
+                    name, ver = parts[0], (parts[1] if len(parts) > 1 else "---")
+                    status = "✅ OK"
+                    for key, target in app_meta.items():
+                        if key.lower() in name.lower():
+                            try:
+                                if float(ver.split('.')[0]) < float(target.split('.')[0]):
+                                    status = f"⚠️ Update do {target}"
+                            except: status = "✅ Zweryfikowano"
+                    results.append({"Program": name, "Wersja": ver, "Status": status})
+        
+        if results:
+            df = pd.DataFrame(results).drop_duplicates().sort_values(by="Program")
+            st.dataframe(df, use_container_width=True, hide_index=True)
+    else:
+        st.info("💡 Wgraj wygenerowany plik, aby automatycznie zaktualizować dane komputera i listę softu.")
