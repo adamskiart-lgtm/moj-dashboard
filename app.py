@@ -9,10 +9,10 @@ from email.mime.text import MIMEText
 from streamlit_calendar import calendar
 
 # --- 1. KONFIGURACJA ---
-# Wersja kodu: v6.2 [2026-02-22]
+# Wersja kodu: v6.3 [2026-02-22]
 st.set_page_config(page_title="Operations Center PRO", layout="wide")
 
-# --- 2. LOGIKA MONITOROWANIA I E-MAIL ---
+# --- 2. LOGIKA MONITOROWANIA I E-MAIL (ZAMROŻONA) ---
 def send_notification(subject, body):
     try:
         msg = MIMEText(body)
@@ -23,8 +23,7 @@ def send_notification(subject, body):
             server.login(st.secrets["email_user"], st.secrets["email_password"])
             server.send_message(msg)
         return True
-    except:
-        return False
+    except: return False
 
 def run_daily_check(poczta_content):
     today = datetime.date.today().isoformat()
@@ -60,11 +59,7 @@ def get_dynamic_gov_events():
                     iso_date = f"{year}-{month}-{day}"
                     event_id = f"{iso_date}_{podmiot}"
                     if not any(e.get('id') == event_id for e in events):
-                        events.append({
-                            "id": event_id, "title": f"{time_range} | {podmiot}", "start": iso_date, "end": iso_date,
-                            "backgroundColor": "#EE6C4D" if "PP" in podmiot else "#3D5A80", "display": "block", "allDay": True,
-                            "extendedProps": {"pub_date": pub_date, "provider": podmiot}
-                        })
+                        events.append({"id": event_id, "title": f"{time_range} | {podmiot}", "start": iso_date, "end": iso_date, "backgroundColor": "#EE6C4D" if "PP" in podmiot else "#3D5A80", "display": "block", "allDay": True, "extendedProps": {"pub_date": pub_date, "provider": podmiot}})
                 except: continue
         return events
     except: return []
@@ -92,93 +87,86 @@ run_daily_check(current_poczta)
 
 with st.sidebar:
     st.title("📂 Menu")
-    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v62")
+    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v63")
     st.divider()
-    st.write("**Wersja:** v6.2")
-    st.caption(f"Status: {datetime.datetime.now().strftime('%H:%M:%S')}")
+    st.write("**Wersja:** v6.3")
 
-# --- 5. WIDOK: E-DORĘCZENIA ---
+# --- 5. WIDOK: E-DORĘCZENIA (ZAMROŻONY) ---
 if choice == "📡 e-Doręczenia":
     st.header("📡 Monitor e-Doręczeń")
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("🕵️ Poczta Polska")
         st.info(current_poczta)
-        st.markdown('<a href="https://edoreczenia.poczta-polska.pl/informacje/prace-serwisowe/" style="color:#007bff;font-weight:bold;">Strona Poczty Polskiej</a>', unsafe_allow_html=True)
+        st.markdown('[➔ Strona Poczty Polskiej](https://edoreczenia.poczta-polska.pl/informacje/prace-serwisowe/)')
     with col2:
         st.subheader("🕵️ GOV.PL")
         st.warning("Przerwy widoczne w kalendarzu poniżej.")
-        st.markdown('<a href="https://www.gov.pl/web/e-doreczenia/niedostepnosc-uslugi-edoreczen" style="color:#007bff;font-weight:bold;">Strona GOV.PL</a>', unsafe_allow_html=True)
+        st.markdown('[➔ Strona GOV.PL](https://www.gov.pl/web/e-doreczenia/niedostepnosc-uslugi-edoreczen)')
     st.divider()
-    cal_data = calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v62")
+    cal_data = calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v63")
     if "eventClick" in cal_data:
         ev = cal_data["eventClick"]["event"]
         st.success(f"🔍 **Zgłosił:** {ev['extendedProps']['provider']} | **Publikacja:** {ev['extendedProps']['pub_date']}")
 
 # --- 6. WIDOK: SYSTEM I SOFT ---
 elif choice == "💻 System i Soft":
-    st.header("💻 Audyt i Wydajność Systemu")
-    st.info("💻 **Jednostka:** Dell Precision 5540 | i9 | 32GB RAM | Quadro T2000")
+    st.header("💻 Audyt i Hub Aktualizacji")
+    st.info("💻 **Dell Precision 5540** | i9 | Quadro T2000 | [Pobierz Sterowniki Dell](https://www.dell.com/support/home/pl-pl/product-support/product/precision-15-5540-laptop/drivers)")
     
-    # Baza referencyjna wersji
-    latest_versions = {
-        "Adobe Photoshop": "27.3", "Norton 360": "22.24", "Epic Games": "15.0", 
-        "Java": "8.0", "Edge": "145", "Total Commander": "10.0", "Fortnite": "28.0",
-        "NVIDIA Control Panel": "550.0"
+    # Baza linków i wersji
+    app_meta = {
+        "Adobe": {"target": "27.0", "url": "https://www.adobe.com/pl/creativecloud/desktop.html"},
+        "Norton": {"target": "22.0", "url": "https://my.norton.com/"},
+        "Epic": {"target": "15.0", "url": "https://www.epicgames.com/store/pl/download"},
+        "Fortnite": {"target": "28.0", "url": "https://www.epicgames.com/fortnite/pl/download"},
+        "Java": {"target": "8.0", "url": "https://www.java.com/pl/download/"},
+        "Edge": {"target": "140", "url": "https://www.microsoft.com/pl-pl/edge"},
+        "Total Commander": {"target": "11.0", "url": "https://www.ghisler.com/download.htm"},
+        "NVIDIA": {"target": "550", "url": "https://www.nvidia.pl/Download/index.aspx?lang=pl"}
     }
 
-    st.subheader("1. Pobierz aktualne dane systemowe")
-    st.write("Uruchom PowerShell (Admin) i wklej:")
+    st.subheader("1. Generowanie raportu (PowerShell Admin)")
     st.code('Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | Select-Object DisplayName, DisplayVersion | Out-File "C:\\Test\\moje_programy.txt"', language='powershell')
     
     st.divider()
-    st.subheader("2. Weryfikacja i Audyt")
-    st.write("Wgraj plik z `C:\\Test\\` do analizy:")
-    up = st.file_uploader("Wybierz plik moje_programy.txt", type="txt", key="up_v62")
+    up = st.file_uploader("Wgraj plik moje_programy.txt z C:\\Test\\", type="txt", key="up_v63")
     
     if up:
         raw = up.read()
         try: text = raw.decode('utf-16')
         except: text = raw.decode('utf-8')
             
-        audit_results = []
+        results = []
         lines = text.splitlines()
         for line in lines:
             if line.strip() and "----" not in line and "DisplayName" not in line:
                 parts = re.split(r'\s{2,}', line.strip())
                 if len(parts) >= 1:
-                    name = parts[0]
-                    version = parts[1] if len(parts) > 1 else "---"
-                    status = "✅ Zainstalowano"
+                    name, ver = parts[0], (parts[1] if len(parts) > 1 else "---")
+                    status, download_url = "✅ OK", None
                     
-                    for key, v_target in latest_versions.items():
+                    for key, data in app_meta.items():
                         if key.lower() in name.lower():
+                            download_url = data["url"]
                             try:
-                                if float(version.split('.')[0]) < float(v_target.split('.')[0]):
-                                    status = f"⚠️ Wymagany Update ({v_target})"
-                                else:
-                                    status = "✅ Aktualny"
+                                if float(ver.split('.')[0]) < float(data["target"].split('.')[0]):
+                                    status = f"⚠️ Wymagany Update"
                             except: status = "✅ Zweryfikowano"
                             break
-                    audit_results.append({"Program": name, "Wersja": version, "Status": status})
+                    results.append({"Program": name, "Wersja": ver, "Status": status, "Link": download_url})
         
-        if audit_results:
-            df = pd.DataFrame(audit_results).drop_duplicates().sort_values(by="Program")
+        if results:
+            df = pd.DataFrame(results).drop_duplicates().sort_values(by="Program")
             st.dataframe(df, use_container_width=True, hide_index=True)
             
-            # Generator procedury
-            to_update = [i for i in audit_results if "⚠️" in i['Status']]
-            if to_update:
-                st.subheader("📋 Procedura Aktualizacji")
-                for app in to_update:
-                    name = app['Program']
-                    if "Adobe" in name: st.write(f"🔹 **{name}**: Przez Adobe Creative Cloud (Update All).")
-                    elif "Norton" in name: st.write(f"🔹 **{name}**: Prawy klik na ikonę w zasobniku > LiveUpdate.")
-                    elif "Fortnite" in name or "Epic" in name: st.write(f"🔹 **{name}**: Epic Games Launcher > Library > Update.")
-                    else: st.write(f"🔹 **{name}**: Pobierz nową wersję instalatora.")
-                
-                st.warning("⚠️ **Analiza wydajności:** Aktualizacja Adobe i sterowników graficznych odblokuje pełną moc Twojego i9 i karty Quadro w zadaniach renderowania.")
+            st.divider()
+            st.subheader("📋 Szybka Ścieżka Aktualizacji")
+            updates_needed = [r for r in results if "⚠️" in r['Status']]
+            
+            if updates_needed:
+                for item in updates_needed:
+                    st.markdown(f"**{item['Program']}** ➔ [Kliknij, aby pobrać/zaktualizować]({item['Link']})")
+                st.warning("💡 Pamiętaj o restartowaniu systemu po instalacji sterowników NVIDIA Quadro.")
             else:
-                st.success("Wszystkie kluczowe programy są aktualne. Wydajność optymalna!")
-    else:
-        st.info("Wgraj plik, aby sprawdzić spójność i wydajność systemu.")
+                st.success("System jest w pełni zoptymalizowany. Nie wykryto przestarzałych aplikacji.")
