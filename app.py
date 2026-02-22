@@ -10,7 +10,7 @@ from email.mime.text import MIMEText
 from streamlit_calendar import calendar
 
 # --- 1. KONFIGURACJA ---
-# Wersja kodu: v6.6 [2026-02-22]
+# Wersja kodu: v6.7 [2026-02-22]
 st.set_page_config(page_title="Operations Center PRO", layout="wide")
 
 # --- 2. [ZAMROŻONE] LOGIKA MONITOROWANIA I E-MAIL ---
@@ -88,9 +88,9 @@ run_daily_check(current_poczta)
 
 with st.sidebar:
     st.title("📂 Menu")
-    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v66")
+    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v67")
     st.divider()
-    st.write("**Wersja:** v6.6")
+    st.write("**Wersja:** v6.7")
 
 # --- 5. WIDOK: E-DORĘCZENIA (ZAMROŻONY) ---
 if choice == "📡 e-Doręczenia":
@@ -105,59 +105,38 @@ if choice == "📡 e-Doręczenia":
         st.warning("Przerwy widoczne w kalendarzu poniżej.")
         st.markdown('<a href="https://www.gov.pl/web/e-doreczenia/niedostepnosc-uslugi-edoreczen" style="color:#007bff;font-weight:bold;">Strona GOV.PL</a>', unsafe_allow_html=True)
     st.divider()
-    cal_data = calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v66")
+    cal_data = calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v67")
     if "eventClick" in cal_data:
         ev = cal_data["eventClick"]["event"]
         st.success(f"🔍 **Zgłosił:** {ev['extendedProps']['provider']} | **Publikacja:** {ev['extendedProps']['pub_date']}")
 
-# --- 6. WIDOK: SYSTEM I SOFT ---
+# --- 6. WIDOK: SYSTEM I SOFT (FULL SPECS) ---
 elif choice == "💻 System i Soft":
     st.header("💻 Audyt Sprzętowo-Programowy")
     
-    st.subheader("1. Generuj raport zbiorczy")
-    st.write("Wklej w PowerShell (Administrator):")
+    st.subheader("1. Przygotuj raport zbiorczy")
+    st.write("Skopiuj i wklej w PowerShell (Administrator):")
     ps_script = '$info = @{Model=(Get-CimInstance Win32_ComputerSystem).Model; CPU=(Get-CimInstance Win32_Processor).Name; RAM="$([Math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB)) GB"; GPU=(Get-CimInstance Win32_VideoController).Name}; $info | Out-File "C:\\Test\\raport_systemowy.txt"; Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | Select-Object DisplayName, DisplayVersion | Out-File "C:\\Test\\raport_systemowy.txt" -Append'
     st.code(ps_script, language='powershell')
 
     st.divider()
-    st.subheader("2. Wgraj i analizuj")
-    st.write("Wskazówka: Plik znajdziesz w `C:\\Test\\raport_systemowy.txt`")
-    up = st.file_uploader("Wgraj raport_systemowy.txt", type="txt", key="up_v66")
+    st.subheader("2. Wgraj raport i sprawdź specyfikację")
+    up = st.file_uploader("Wgraj raport_systemowy.txt", type="txt", key="up_v67")
 
     if up:
         raw = up.read()
         try: text = raw.decode('utf-16')
         except: text = raw.decode('utf-8')
 
-        # Wyciąganie Hardware
+        # --- WYCIĄGANIE PEŁNEJ SPECYFIKACJI ---
         m_model = re.search(r'Model\s+=\s+(.*)', text)
         m_cpu = re.search(r'CPU\s+=\s+(.*)', text)
         m_ram = re.search(r'RAM\s+=\s+(.*)', text)
         m_gpu = re.search(r'GPU\s+=\s+(.*)', text)
 
-        if m_model:
-            st.info(f"💻 **Jednostka:** {m_model.group(1)} | {m_cpu.group(1) if m_cpu else 'N/A'}")
-            st.write(f"🚀 **Zasoby:** RAM: {m_ram.group(1) if m_ram else 'N/A'} | GPU: {m_gpu.group(1) if m_gpu else 'N/A'}")
+        st.success("✅ Dane sprzętowe wczytane pomyślnie!")
         
-        # Wyciąganie Software i weryfikacja
-        app_meta = {"Adobe Photoshop": "27.0", "Norton": "22.0", "Epic Games": "15.0", "Fortnite": "28.0", "Java": "8.0"}
-        results = []
-        for line in text.splitlines():
-            if line.strip() and "=" not in line and "DisplayName" not in line:
-                parts = re.split(r'\s{2,}', line.strip())
-                if len(parts) >= 1:
-                    name, ver = parts[0], (parts[1] if len(parts) > 1 else "---")
-                    status = "✅ OK"
-                    for key, target in app_meta.items():
-                        if key.lower() in name.lower():
-                            try:
-                                if float(ver.split('.')[0]) < float(target.split('.')[0]):
-                                    status = f"⚠️ Update do {target}"
-                            except: status = "✅ Zweryfikowano"
-                    results.append({"Program": name, "Wersja": ver, "Status": status})
-        
-        if results:
-            df = pd.DataFrame(results).drop_duplicates().sort_values(by="Program")
-            st.dataframe(df, use_container_width=True, hide_index=True)
-    else:
-        st.info("💡 Wgraj wygenerowany plik, aby automatycznie zaktualizować dane komputera i listę softu.")
+        # Wyświetlanie specyfikacji w kolumnach
+        c1, c2, c3, c4 = st.columns(4)
+        with c1: st.metric("Model Maszyny", m_model.group(1) if m_model else "N/A")
+        with c2: st.metric("Procesor", m_cpu.group(1).split('@')[0] if m_cpu else "N/A
