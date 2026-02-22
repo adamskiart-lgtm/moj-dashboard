@@ -6,7 +6,7 @@ import re
 from streamlit_calendar import calendar
 
 # --- 1. KONFIGURACJA ---
-# Wersja kodu: v4.2
+# Wersja kodu: v4.3
 st.set_page_config(page_title="Operations Center PRO", layout="wide")
 
 # --- 2. KALENDARZ (KOD ZAMROŻONY) ---
@@ -38,6 +38,82 @@ def get_dynamic_gov_events():
                 except: continue
         return events
     except: return []
+
+# --- 3. DYNAMICZNY KOMUNIKAT POCZTY (PEŁNA TREŚĆ DO LINII) ---
+def get_poczta_full_dynamic_alert():
+    try:
+        url = "https://edoreczenia.poczta-polska.pl/informacje/prace-serwisowe/"
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        res = requests.get(url, headers=headers, timeout=15)
+        soup = BeautifulSoup(res.text, 'html.parser')
+        
+        # Wybieramy kontener z treścią
+        main_content = soup.find('div', {'class': 'entry-content'}) or soup.find('article')
+        if not main_content: return "Nie znaleziono sekcji komunikatu."
+
+        # Pobieramy tekst zachowując nową linię
+        lines = [line.strip() for line in main_content.get_text("\n").split("\n") if line.strip()]
+        
+        clean_lines = []
+        found_start = False
+        
+        for line in lines:
+            # Szukamy początku komunikatu
+            if "Informujemy" in line:
+                found_start = True
+            
+            if found_start:
+                clean_lines.append(line)
+                # Szukamy daty publikacji (format XX.XX.XXXX), która kończy blok przed linią
+                # Używamy regexa, żeby sprawdzić czy linia to TYLKO data (koniec komunikatu)
+                if re.fullmatch(r'\d{2}\.\d{2}\.\d{4}', line):
+                    break
+        
+        if clean_lines:
+            return "\n\n".join(clean_lines)
+        return "Brak aktualnego komunikatu spełniającego kryteria."
+    except Exception as e:
+        return f"Błąd połączenia: {str(e)}"
+
+# --- 4. INTERFEJS ---
+with st.sidebar:
+    st.title("📂 Menu")
+    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"])
+    st.divider()
+    st.write("**Wersja kodu:** v4.3")
+
+if choice == "📡 e-Doręczenia":
+    st.header("📡 Monitor e-Doręczeń")
+    
+    col1, col2 = st.columns(2)
+    
+    # SEKCJA POCZTA POLSKA
+    with col1:
+        st.subheader("🕵️ Poczta Polska")
+        full_alert = get_poczta_full_dynamic_alert()
+        # Wyświetlamy jako czysty tekst w boksie informacyjnym
+        st.info(full_alert)
+        
+        st.markdown('<a href="https://edoreczenia.poczta-polska.pl/informacje/prace-serwisowe/" style="color: #007bff; text-decoration: none; font-weight: bold;">Strona Poczty Polskiej - Prace serwisowe</a>', unsafe_allow_html=True)
+
+    # SEKCJA GOV.PL
+    with col2:
+        st.subheader("🕵️ GOV.PL")
+        st.write("Szczegóły planowanych niedostępności znajdują się w kalendarzu poniżej.")
+        st.markdown('<a href="https://www.gov.pl/web/e-doreczenia/niedostepnosc-uslugi-edoreczen" style="color: #007bff; text-decoration: none; font-weight: bold;">Strona GOV.PL - Niedostępność e-Doręczeń</a>', unsafe_allow_html=True)
+
+    st.divider()
+    
+    # KALENDARZ (ZAMROŻONY)
+    st.subheader("📅 Harmonogram (Zgłoszenia PP / COI)")
+    calendar(events=get_dynamic_gov_events(), options={
+        "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth"},
+        "initialView": "dayGridMonth", "height": 450, "locale": "pl", "displayEventTime": False
+    })
+
+elif choice == "💻 System i Soft":
+    st.header("💻 Centrum Systemowe")
+    st.table([{"Program": "Adobe Photoshop 2026", "Status": "⚠️ Update"}, {"Program": "Microsoft Edge", "Status": "✅ OK"}])
 
 # --- 3. DYNAMICZNY KOMUNIKAT POCZTY (NAPRAWIONY) ---
 def get_poczta_dynamic_alert():
@@ -111,3 +187,4 @@ if choice == "📡 e-Doręczenia":
 elif choice == "💻 System i Soft":
     st.header("💻 Centrum Systemowe")
     st.table([{"Program": "Adobe Photoshop 2026", "Status": "⚠️ Update"}, {"Program": "Microsoft Edge", "Status": "✅ OK"}])
+
