@@ -9,15 +9,14 @@ from email.mime.text import MIMEText
 from streamlit_calendar import calendar
 
 # --- 1. KONFIGURACJA ---
-# Wersja kodu: v7.4 [2026-02-22]
+# Wersja kodu: v7.5 [2026-02-22]
 st.set_page_config(page_title="Operations Center PRO", layout="wide")
 
-# --- CSS: MAŁA CZCIONKA DLA KOMPLETNYCH INFORMACJI ---
+# --- CSS: KOMPAKTOWE METRYKI ---
 st.markdown("""
     <style>
-    [data-testid="stMetricValue"] { font-size: 1.3rem !important; font-weight: 700; }
-    [data-testid="stMetricLabel"] { font-size: 0.8rem !important; }
-    .stDataFrame { font-size: 0.8rem !important; }
+    [data-testid="stMetricValue"] { font-size: 1.4rem !important; font-weight: 700; color: #1E3A8A; }
+    [data-testid="stMetricLabel"] { font-size: 0.85rem !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -96,9 +95,9 @@ run_daily_check(current_poczta)
 
 with st.sidebar:
     st.title("📂 Menu")
-    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v74")
+    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v75")
     st.divider()
-    st.write("**Wersja:** v7.4")
+    st.write("**Wersja:** v7.5")
 
 # --- 5. WIDOK: E-DORĘCZENIA (ZAMROŻONY) ---
 if choice == "📡 e-Doręczenia":
@@ -111,9 +110,9 @@ if choice == "📡 e-Doręczenia":
         st.subheader("🕵️ GOV.PL")
         st.warning("Przerwy widoczne w kalendarzu poniżej.")
     st.divider()
-    calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v74")
+    calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v75")
 
-# --- 6. WIDOK: SYSTEM I SOFT (FINALNA NAPRAWA LISTY) ---
+# --- 6. WIDOK: SYSTEM I SOFT (FIXED HARDWARE) ---
 elif choice == "💻 System i Soft":
     st.header("💻 Audyt Sprzętowo-Programowy")
     
@@ -127,80 +126,63 @@ elif choice == "💻 System i Soft":
     }
 
     st.subheader("1. Wykonaj Raport (PowerShell Admin)")
-    ps_command = (
-        "powershell -Command \"$h = @{ 'Model'=(Get-CimInstance Win32_ComputerSystem).Model; "
-        "'CPU'=(Get-CimInstance Win32_Processor).Name; "
-        "'RAM'='$( [Math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB) ) GB'; "
-        "'GPU'=(Get-CimInstance Win32_VideoController).Name }; "
-        "$h.GetEnumerator() | ForEach-Object { \\\"$($_.Key): $($_.Value)\\\" } | Out-File 'C:\\Test\\raport_systemowy.txt' -Encoding utf8; "
+    # UPROSZCZONA KOMENDA - bez ryzykownych znaków
+    final_ps = (
+        "Write-Output 'MODEL:' (Get-CimInstance Win32_ComputerSystem).Model > C:\\Test\\raport_systemowy.txt; "
+        "Write-Output 'CPU:' (Get-CimInstance Win32_Processor).Name >> C:\\Test\\raport_systemowy.txt; "
+        "Write-Output 'RAM:' ((Get-CimInstance Win32_PhysicalMemory | Measure-Object Capacity -Sum).Sum / 1GB) 'GB' >> C:\\Test\\raport_systemowy.txt; "
+        "Write-Output 'GPU:' (Get-CimInstance Win32_VideoController).Name >> C:\\Test\\raport_systemowy.txt; "
         "Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | "
-        "Select-Object DisplayName, DisplayVersion | Out-File 'C:\\Test\\raport_systemowy.txt' -Append -Encoding utf8; "
-        "exit\""
+        "Select-Object DisplayName, DisplayVersion | Out-File C:\\Test\\raport_systemowy.txt -Append -Encoding utf8; "
+        "exit"
     )
-    st.code(ps_command, language='powershell')
+    st.code(final_ps, language='powershell')
 
     st.divider()
-    up = st.file_uploader("2. Wgraj raport z C:\\Test\\raport_systemowy.txt", type="txt", key="up_v74")
+    up = st.file_uploader("2. Wgraj raport z C:\\Test\\raport_systemowy.txt", type="txt", key="up_v75")
 
     if up:
         raw_text = up.read().decode('utf-8', errors='ignore')
         lines = raw_text.splitlines()
         
-        # --- ODCZYT SPRZĘTU ---
+        # --- ROBUST HARDWARE DISCOVERY ---
         hw = {'Model': 'N/A', 'CPU': 'N/A', 'RAM': 'N/A', 'GPU': 'N/A'}
         for line in lines:
-            if ":" in line and ("DisplayName" not in line and "DisplayVersion" not in line):
-                parts = line.split(":", 1)
-                k = parts[0].strip()
-                if k in hw: hw[k] = parts[1].strip()
+            line_up = line.upper()
+            if "MODEL:" in line_up: hw['Model'] = line.split(':', 1)[1].strip()
+            elif "CPU:" in line_up: hw['CPU'] = line.split(':', 1)[1].strip().split('@')[0]
+            elif "RAM:" in line_up: hw['RAM'] = line.split(':', 1)[1].strip()
+            elif "GPU:" in line_up: hw['GPU'] = line.split(':', 1)[1].strip()
 
-        st.success("✅ Dane sprzętowe:")
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Model", hw['Model'])
-        c2.metric("Procesor", hw['CPU'].split('@')[0].strip())
+        c1.metric("Maszyna", hw['Model'])
+        c2.metric("Procesor", hw['CPU'])
         c3.metric("RAM", hw['RAM'])
         c4.metric("Grafika", hw['GPU'])
         
         st.divider()
         
-        # --- ANALIZA PROGRAMÓW (NOWA LOGIKA) ---
+        # --- PROGRAM ANALYZER ---
         results, updates = [], []
-        # Szukamy par w liniach, które nie są sprzętowe
         for line in lines:
-            line = line.strip()
-            if not line or ":" in line[:15] or "----" in line or "DisplayName" in line:
-                continue
-            
-            # Dzielimy po wielu spacjach (min. 2)
-            parts = re.split(r'\s{2,}', line)
-            if len(parts) >= 1:
-                name = parts[0]
-                version = parts[1] if len(parts) > 1 else "---"
-                
+            if any(x in line.upper() for x in ["MODEL:", "CPU:", "RAM:", "GPU:", "DISPLAYNAME"]): continue
+            parts = re.split(r'\s{2,}', line.strip())
+            if len(parts) >= 1 and len(parts[0]) > 2:
+                name, ver = parts[0], (parts[1] if len(parts) > 1 else "---")
                 status = "✅ OK"
                 for key, meta in app_meta.items():
                     if key.lower() in name.lower():
                         try:
-                            # Próba porównania wersji
-                            curr_v = float(re.search(r'\d+', version).group())
-                            target_v = float(re.search(r'\d+', meta["target"]).group())
-                            if curr_v < target_v:
+                            v_clean = re.sub(r'[^\d.]', '', ver).split('.')[0]
+                            t_clean = meta["target"].split('.')[0]
+                            if int(v_clean) < int(t_clean):
                                 status = f"⚠️ Update do {meta['target']}"
-                                updates.append({"name": name, "url": meta["url"]})
-                        except:
-                            status = "✅ Sprawdzono"
-                
-                results.append({"Program": name, "Wersja": version, "Status": status})
+                                updates.append({"n": name, "u": meta["url"]})
+                        except: pass
+                results.append({"Program": name, "Wersja": ver, "Status": status})
 
         if results:
-            st.subheader("📋 Lista Oprogramowania")
-            df = pd.DataFrame(results).drop_duplicates().sort_values(by="Program")
-            st.dataframe(df, use_container_width=True, hide_index=True)
-            
+            st.dataframe(pd.DataFrame(results).drop_duplicates().sort_values(by="Program"), use_container_width=True, hide_index=True)
             if updates:
-                st.divider()
                 st.subheader("🚀 Instrukcja Aktualizacji")
-                for itm in updates:
-                    st.warning(f"**{itm['name']}** ➔ [Pobierz stąd]({itm['url']})")
-        else:
-            st.error("Nie znaleziono aplikacji w pliku. Upewnij się, że użyłeś poprawnej komendy PowerShell.")
+                for itm in updates: st.warning(f"**{itm['n']}** ➔ [Pobierz stąd]({itm['u']})")
