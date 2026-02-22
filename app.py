@@ -6,7 +6,7 @@ import re
 from streamlit_calendar import calendar
 
 # --- 1. KONFIGURACJA ---
-# Wersja kodu: v4.4 (Ostateczna Precyzja)
+# Wersja kodu: v4.5
 st.set_page_config(page_title="Operations Center PRO", layout="wide")
 
 # --- 2. KALENDARZ (KOD ZAMROŻONY) ---
@@ -39,78 +39,66 @@ def get_dynamic_gov_events():
         return events
     except: return []
 
-# --- 3. DYNAMICZNY KOMUNIKAT POCZTY (PRECYZJA DO LINII) ---
-def get_poczta_strict_dynamic_alert():
+# --- 3. UPROSZCZONE POBIERANIE OSTATNIEJ WIADOMOŚCI ---
+def get_poczta_simple_alert():
     try:
         url = "https://edoreczenia.poczta-polska.pl/informacje/prace-serwisowe/"
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-        res = requests.get(url, headers=headers, timeout=15)
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+        res = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(res.text, 'html.parser')
         
-        # Pobieramy główny blok treści
-        main_content = soup.find('div', {'class': 'entry-content'}) or soup.find('article')
-        if not main_content: return "Nie znaleziono sekcji komunikatu."
-
-        # Pobieramy wszystkie elementy i szukamy konkretnie bloku od "Informujemy" do daty
-        found_lines = []
-        is_capturing = False
+        # Pobieramy po prostu wszystkie akapity i szukamy tego z komunikatem
+        paragraphs = soup.find_all('p')
+        content = []
+        for p in paragraphs:
+            txt = p.get_text().strip()
+            # Szukamy akapitu, który zaczyna się od "Informujemy"
+            if "Informujemy" in txt:
+                content.append(txt)
+                # Szukamy daty publikacji w kolejnych elementach, by zamknąć komunikat
+                parent = p.find_parent()
+                if parent:
+                    all_p_in_parent = parent.find_all('p')
+                    start_idx = all_p_in_parent.index(p)
+                    for next_p in all_p_in_parent[start_idx+1:]:
+                        next_txt = next_p.get_text().strip()
+                        content.append(next_txt)
+                        if re.fullmatch(r'\d{2}\.\d{2}\.\d{4}', next_txt):
+                            break
+                break
         
-        # Iterujemy po paragrafach i nagłówkach
-        for element in main_content.find_all(['p', 'h3', 'li', 'div']):
-            text = element.get_text().strip()
-            if not text: continue
-            
-            # Start: szukamy "Informujemy"
-            if "Informujemy" in text:
-                is_capturing = True
-            
-            if is_capturing:
-                # Sprawdzamy czy linia zawiera datę publikacji (format XX.XX.XXXX), która kończy komunikat
-                if re.fullmatch(r'\d{2}\.\d{2}\.\d{4}', text):
-                    found_lines.append(f"**{text}**") # Wytłuszczenie daty publikacji
-                    break
-                found_lines.append(text)
-        
-        if found_lines:
-            return "\n\n".join(found_lines)
-        return "Brak aktualnego komunikatu."
-    except Exception as e:
-        return f"Błąd połączenia: {str(e)}"
+        return "\n\n".join(content) if content else "Nie znaleziono aktywnego komunikatu o pracach."
+    except:
+        return "Błąd połączenia ze stroną Poczty."
 
 # --- 4. INTERFEJS ---
 with st.sidebar:
     st.title("📂 Menu")
-    # Dodanie unikalnego klucza (key) rozwiązuje błąd DuplicateElementId ze zrzutu ekranu
-    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="main_nav_radio")
+    # Dodanie key zapobiega błędom Streamlita przy przeładowaniu
+    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v45")
     st.divider()
-    st.write("**Wersja kodu:** v4.4")
+    st.write("**Wersja kodu:** v4.5")
 
 if choice == "📡 e-Doręczenia":
     st.header("📡 Monitor e-Doręczeń")
     
     col1, col2 = st.columns(2)
-    
     with col1:
         st.subheader("🕵️ Poczta Polska")
-        # Wyświetlanie precyzyjnego komunikatu (od "Informujemy" do daty publikacji)
-        st.info(get_poczta_strict_dynamic_alert())
-        # Niebieski link tekstowy
-        st.markdown('<a href="https://edoreczenia.poczta-polska.pl/informacje/prace-serwisowe/" target="_blank" style="color: #007bff; text-decoration: none; font-weight: bold;">➔ Przejdź do: Strona Poczty Polskiej - Prace serwisowe</a>', unsafe_allow_html=True)
+        st.info(get_poczta_simple_alert())
+        st.markdown('<a href="https://edoreczenia.poczta-polska.pl/informacje/prace-serwisowe/" style="color: #007bff; text-decoration: none; font-weight: bold;">Strona Poczty Polskiej - Prace serwisowe</a>', unsafe_allow_html=True)
 
     with col2:
         st.subheader("🕵️ GOV.PL")
-        st.warning("Aktualna tabela niedostępności pobierana dynamicznie poniżej.")
-        # Niebieski link tekstowy
-        st.markdown('<a href="https://www.gov.pl/web/e-doreczenia/niedostepnosc-uslugi-edoreczen" target="_blank" style="color: #007bff; text-decoration: none; font-weight: bold;">➔ Przejdź do: Strona GOV.PL - Niedostępność e-Doręczeń</a>', unsafe_allow_html=True)
+        st.warning("Najnowsze ogłoszenia są widoczne w kalendarzu poniżej.")
+        st.markdown('<a href="https://www.gov.pl/web/e-doreczenia/niedostepnosc-uslugi-edoreczen" style="color: #007bff; text-decoration: none; font-weight: bold;">Strona GOV.PL - Niedostępność e-Doręczeń</a>', unsafe_allow_html=True)
 
     st.divider()
-    
-    # KALENDARZ (ZAMROŻONY)
     st.subheader("📅 Harmonogram (Zgłoszenia PP / COI)")
     calendar(events=get_dynamic_gov_events(), options={
         "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth"},
         "initialView": "dayGridMonth", "height": 450, "locale": "pl", "displayEventTime": False
-    }, key="main_calendar_widget")
+    }, key="calendar_v45")
 
 elif choice == "💻 System i Soft":
     st.header("💻 Centrum Systemowe")
