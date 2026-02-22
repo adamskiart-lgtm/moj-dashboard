@@ -7,11 +7,10 @@ import pandas as pd
 from streamlit_calendar import calendar
 
 # --- 1. KONFIGURACJA ---
-# Wersja kodu: v5.0 (Scanner & Inventory)
+# Wersja kodu: v5.2
 st.set_page_config(page_title="Operations Center PRO", layout="wide")
 
-# --- [SEKCJA ZAMROŻONA] 2. E-DORĘCZENIA (KALENDARZ I ALERTY) ---
-# (Kod funkcji get_dynamic_gov_events i get_poczta_simple_alert pozostaje bez zmian)
+# --- [SEKCJA ZAMROŻONA] 2. E-DORĘCZENIA ---
 def get_dynamic_gov_events():
     url = "https://www.gov.pl/web/e-doreczenia/niedostepnosc-uslugi-edoreczen"
     events = []
@@ -33,7 +32,7 @@ def get_dynamic_gov_events():
                     month = months[next(m for m in months if m in raw_dt)]
                     year = re.search(r'(202\d)', raw_dt).group(1)
                     times = re.findall(r'(\d{1,2}[:.]\d{2})', raw_dt)
-                    time_range = f"{times[0]}-{times[1]}" if len(times) >= 2 else "Planowana"
+                    time_range = f"{times[0]}-{times[1]}" if len(times) >= 2 else "Brak godz."
                     iso_date = f"{year}-{month}-{day}"
                     event_id = f"{iso_date}_{podmiot}"
                     if not any(e.get('id') == event_id for e in events):
@@ -65,12 +64,12 @@ def get_poczta_simple_alert():
         return "Brak aktywnych komunikatów."
     except: return "Błąd połączenia."
 
-# --- 3. INTERFEJS I NAWIGACJA ---
+# --- 3. NAWIGACJA ---
 with st.sidebar:
     st.title("📂 Menu")
-    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v50")
+    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v52")
     st.divider()
-    st.write(f"**Wersja kodu:** v5.0")
+    st.write(f"**Wersja kodu:** v5.2")
 
 if choice == "📡 e-Doręczenia":
     st.header("📡 Monitor e-Doręczeń")
@@ -78,73 +77,48 @@ if choice == "📡 e-Doręczenia":
     with col1:
         st.subheader("🕵️ Poczta Polska")
         st.info(get_poczta_simple_alert())
-        st.markdown('<a href="..." style="color: #007bff; font-weight: bold;">Strona Poczty Polskiej</a>', unsafe_allow_html=True)
+        st.markdown('<a href="https://edoreczenia.poczta-polska.pl/informacje/prace-serwisowe/" style="color: #007bff; font-weight: bold;">Strona Poczty Polskiej</a>', unsafe_allow_html=True)
     with col2:
         st.subheader("🕵️ GOV.PL")
-        st.warning("Przerwy widoczne w kalendarzu.")
-        st.markdown('<a href="..." style="color: #007bff; font-weight: bold;">Strona GOV.PL</a>', unsafe_allow_html=True)
+        st.warning("Harmonogram pobierany automatycznie poniżej.")
+        st.markdown('<a href="https://www.gov.pl/web/e-doreczenia/niedostepnosc-uslugi-edoreczen" style="color: #007bff; font-weight: bold;">Strona GOV.PL</a>', unsafe_allow_html=True)
     st.divider()
-    cal_data = calendar(events=get_dynamic_gov_events(), options={"headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth"}, "initialView": "dayGridMonth", "height": 450, "locale": "pl", "displayEventTime": False, "selectable": True}, key="calendar_v50")
-    if "eventClick" in cal_data:
-        event = cal_data["eventClick"]["event"]
-        st.success(f"🔍 **Szczegóły:** {event['extendedProps']['provider']} (Pub: {event['extendedProps']['pub_date']})")
+    calendar(events=get_dynamic_gov_events(), options={"headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth"}, "initialView": "dayGridMonth", "height": 450, "locale": "pl", "displayEventTime": False, "selectable": True}, key="calendar_v52")
 
-# --- 4. SEKCJA SYSTEM I SOFT (MODUŁ SKANERA) ---
+# --- 4. SYSTEM I SOFT ---
 elif choice == "💻 System i Soft":
-    st.header("💻 Centrum Zarządzania i Skaner")
+    st.header("💻 Centrum Diagnostyki Systemowej")
     
-    # Metryki
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Dysk C:", "433 GB Wolne")
-    c2.metric("Status Systemu:", "Stabilny")
-    c3.metric("Ostatni Skan:", datetime.datetime.now().strftime("%d.%m.%Y"))
-
-    st.divider()
+    st.subheader("Step 1: Pobierz dane z systemu")
+    st.write("Skopiuj poniższą komendę i wklej ją do niebieskiego okna **PowerShell** (jako Administrator):")
     
-    # LISTA REFERENCYJNA (To, co CHCEMY mieć)
-    target_versions = {
-        "Adobe Photoshop": "27.3.1",
-        "Java": "8.0.401",
-        "Total Commander": "10.0",
-        "Microsoft Edge": "145.0",
-        "ESET": "17.0",
-        "Cyberpunk 2077": "2.1",
-        "Steam": "1.0.0"
-    }
+    # Blok kodu do skopiowania
+    cmd = 'Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | Select-Object DisplayName, DisplayVersion | Out-File "$env:USERPROFILE\\Desktop\\moje_programy.txt"'
+    st.code(cmd, language='powershell')
+    
+    st.subheader("Step 2: Analiza")
+    up_file = st.file_uploader("Wgraj utworzony plik moje_programy.txt z Pulpitu", type="txt", key="uploader_v52")
 
-    st.subheader("📁 Wgraj plik moje_programy.txt")
-    uploaded_file = st.file_uploader("Wybierz plik wygenerowany przez PowerShell", type="txt")
-
-    if uploaded_file is not None:
-        stringio = uploaded_file.getvalue().decode("utf-16") # PowerShell domyślnie używa UTF-16
+    if up_file:
+        raw = up_file.read()
+        try: text = raw.decode('utf-16')
+        except: text = raw.decode('utf-8')
+        
+        target_apps = {
+            "Adobe Photoshop": "27.3", "Java": "8.0", "ESET": "11.0", 
+            "Cyberpunk 2077": "2.1", "Total Commander": "10.0", "Edge": "145"
+        }
         
         results = []
-        # Analiza wgranego pliku
-        for app, target_ver in target_versions.items():
-            found = False
-            for line in stringio.splitlines():
-                if app.lower() in line.lower():
-                    # Próba wyciągnięcia wersji z linii (zakładamy format Name Version)
-                    current_ver = re.search(r'(\d+[\d\.]*)', line)
-                    current_ver = current_ver.group(1) if current_ver else "Wykryto"
-                    
-                    status = "✅ OK" if target_ver in current_ver else f"⚠️ Update do {target_ver}"
-                    results.append({"Program": app, "Twoja Wersja": current_ver, "Status": status})
-                    found = True
-                    break
-            if not found:
-                results.append({"Program": app, "Twoja Wersja": "Nie znaleziono", "Status": "❌ Brak w systemie"})
+        for app, target_v in target_apps.items():
+            match = re.search(f"{app}.*?(\d+\\.\\d+)", text, re.IGNORECASE)
+            if match:
+                current_v = match.group(1)
+                status = "✅ OK" if current_v >= target_v else f"⚠️ Update do {target_v}"
+                results.append({"Program": app, "Wersja": current_v, "Status": status})
+            else:
+                results.append({"Program": app, "Wersja": "Brak", "Status": "❌ Nie wykryto"})
         
-        st.subheader("🔍 Wynik analizy Twojego systemu")
         st.table(results)
     else:
-        st.info("💡 Wgraj plik, aby sprawdzić aktualność Adobe, Javy, Antywirusa i Gier.")
-        
-    st.divider()
-    st.subheader("📑 Pełna lista (Ręczna)")
-    st.table([
-        {"Kategoria": "System", "Program": "Java Runtime Environment", "Wersja": "8u401", "Status": "✅"},
-        {"Kategoria": "Zabezpieczenia", "Program": "ESET Endpoint Security", "Wersja": "11.0", "Status": "✅"},
-        {"Kategoria": "Gry", "Program": "Cyberpunk 2077 / Wiedźmin 3", "Wersja": "Najnowsza", "Status": "✅"},
-        {"Kategoria": "Narzędzia", "Program": "Total Commander UP", "Wersja": "9.2", "Status": "⚠️ Update"}
-    ])
+        st.info("💡 Po uruchomieniu komendy w PowerShellu, plik pojawi się na Twoim Pulpicie. Wgraj go tutaj.")
