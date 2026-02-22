@@ -139,4 +139,32 @@ elif choice == "💻 System i Soft":
         # Wyświetlanie specyfikacji w kolumnach
         c1, c2, c3, c4 = st.columns(4)
         with c1: st.metric("Model Maszyny", m_model.group(1) if m_model else "N/A")
-        with c2: st.metric("Procesor", m_cpu.group(1).split('@')[0] if m_cpu else "N/A
+        with c2: st.metric("Procesor", m_cpu.group(1).split('@')[0] if m_cpu else "N/A")
+        with c3: st.metric("Pamięć RAM", m_ram.group(1) if m_ram else "N/A")
+        with c4: st.metric("Karta Graficzna", m_gpu.group(1) if m_gpu else "N/A")
+        
+        st.divider()
+        
+        # --- ANALIZA OPROGRAMOWANIA ---
+        app_meta = {"Adobe Photoshop": "27.0", "Norton": "22.0", "Epic Games": "15.0", "Fortnite": "28.0", "Java": "8.0"}
+        results = []
+        for line in text.splitlines():
+            if line.strip() and "=" not in line and "DisplayName" not in line:
+                parts = re.split(r'\s{2,}', line.strip())
+                if len(parts) >= 1:
+                    name, ver = parts[0], (parts[1] if len(parts) > 1 else "---")
+                    status = "✅ OK"
+                    for key, target in app_meta.items():
+                        if key.lower() in name.lower():
+                            try:
+                                if float(ver.split('.')[0]) < float(target.split('.')[0]):
+                                    status = f"⚠️ Update do {target}"
+                            except: status = "✅ Zweryfikowano"
+                    results.append({"Program": name, "Wersja": ver, "Status": status})
+        
+        if results:
+            df = pd.DataFrame(results).drop_duplicates().sort_values(by="Program")
+            st.subheader("📋 Zainstalowane Oprogramowanie")
+            st.dataframe(df, use_container_width=True, hide_index=True)
+    else:
+        st.info("💡 Wgraj wygenerowany plik `raport_systemowy.txt`, aby zobaczyć pełną specyfikację maszyny i listę oprogramowania.")
