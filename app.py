@@ -134,4 +134,68 @@ elif choice == "💻 System i Soft":
     st.subheader("1. Wykonaj Raport (Kopiuj i wklej do PowerShell)")
     # KOMENDA: Generuje raport i zamyka okno (exit)
     ps_command = (
-        "powershell -Command \"$
+        "powershell -Command \"$hw = @{ 'Model' = (Get-CimInstance Win32_ComputerSystem).Model; "
+        "'CPU' = (Get-CimInstance Win32_Processor).Name; "
+        "'RAM' = \\\"$([Math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB)) GB\\\"; "
+        "'GPU' = (Get-CimInstance Win32_VideoController).Name }; "
+        "$hw.GetEnumerator() | ForEach-Object { \\\"$($_.Key): $($_.Value)\\\" } | Out-File 'C:\\Test\\raport_systemowy.txt' -Encoding utf8; "
+        "Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | "
+        "Select-Object DisplayName, DisplayVersion | Format-List | Out-File 'C:\\Test\\raport_systemowy.txt' -Append -Encoding utf8; "
+        "exit\""
+    )
+    st.code(ps_command, language='powershell')
+    st.caption("💡 Po uruchomieniu raportu okno konsoli zamknie się automatycznie.")
+
+    st.divider()
+    up = st.file_uploader("Wgraj raport z C:\\Test\\raport_systemowy.txt", type="txt", key="up_v71")
+
+    if up:
+        raw_text = up.read().decode('utf-8', errors='ignore')
+        st.success("✅ Raport wczytany!")
+        
+        # --- ODCZYT SPRZĘTU ---
+        hw = {'Model': 'N/A', 'CPU': 'N/A', 'RAM': 'N/A', 'GPU': 'N/A'}
+        lines = raw_text.splitlines()
+        for line in lines:
+            if ":" in line:
+                key_part = line.split(":")[0].strip()
+                val_part = line.split(":")[1].strip()
+                if key_part in hw: hw[key_part] = val_part
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Model Maszyny", hw['Model'])
+        c2.metric("Procesor", hw['CPU'].split('@')[0].strip())
+        c3.metric("Pamięć RAM", hw['RAM'])
+        c4.metric("Karta Graficzna", hw['GPU'])
+        
+        st.divider()
+        
+        # --- ANALIZA PROGRAMÓW ---
+        results = []
+        updates = []
+        current_name = ""
+        for line in lines:
+            if "DisplayName :" in line: current_name = line.split(":")[-1].strip()
+            if "DisplayVersion :" in line and current_name:
+                ver = line.split(":")[-1].strip()
+                status = "✅ OK"
+                for key, meta in app_meta.items():
+                    if key.lower() in current_name.lower():
+                        try:
+                            if float(ver.split('.')[0]) < float(meta["target"].split('.')[0]):
+                                status = f"⚠️ Update do {meta['target']}"
+                                updates.append({"name": current_name, "url": meta["url"]})
+                        except: pass
+                results.append({"Program": current_name, "Wersja": ver, "Status": status})
+                current_name = ""
+        
+        if results:
+            df = pd.DataFrame(results).drop_duplicates().sort_values(by="Program")
+            st.subheader("📋 Wykryte Oprogramowanie")
+            st.dataframe(df, use_container_width=True, hide_index=True)
+            
+            if updates:
+                st.divider()
+                st.subheader("🚀 Instrukcja Aktualizacji")
+                for item in updates:
+                    st.warning(f"**{item['name']}** ➔ [Pobierz stąd]({item['url']})")
