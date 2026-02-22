@@ -9,7 +9,7 @@ from email.mime.text import MIMEText
 from streamlit_calendar import calendar
 
 # --- 1. KONFIGURACJA ---
-# Wersja kodu: v7.7 [2026-02-22]
+# Wersja kodu: v7.8 [2026-02-22]
 st.set_page_config(page_title="Operations Center PRO", layout="wide")
 
 # CSS: Czytelne metryki i mniejsza czcionka tabeli
@@ -64,11 +64,10 @@ def get_dynamic_gov_events():
                     month = months[next(m for m in months if m in raw_dt)]
                     year = re.search(r'(202\d)', raw_dt).group(1)
                     times = re.findall(r'(\d{1,2}[:.]\d{2})', raw_dt)
-                    time_range = f"{times[0]}-{times[1]}" if len(times) >= 2 else "Planowana"
-                    iso_date = f"{year}-{month}-{day}"
-                    event_id = f"{iso_date}_{podmiot}"
-                    if not any(e.get('id') == event_id for e in events):
-                        events.append({"id": event_id, "title": f"{time_range} | {podmiot}", "start": iso_date, "end": iso_date, "backgroundColor": "#EE6C4D" if "PP" in podmiot else "#3D5A80", "display": "block", "allDay": True, "extendedProps": {"pub_date": pub_date, "provider": podmiot}})
+                    t_range = f"{times[0]}-{times[1]}" if len(times) >= 2 else "Planowana"
+                    iso = f"{year}-{month}-{day}"
+                    if not any(e.get('id') == f"{iso}_{podmiot}" for e in events):
+                        events.append({"id": f"{iso}_{podmiot}", "title": f"{t_range} | {podmiot}", "start": iso, "end": iso, "backgroundColor": "#EE6C4D" if "PP" in podmiot else "#3D5A80", "display": "block", "allDay": True, "extendedProps": {"pub_date": pub_date, "provider": podmiot}})
                 except: continue
         return events
     except: return []
@@ -96,10 +95,11 @@ run_daily_check(current_poczta)
 
 with st.sidebar:
     st.title("📂 Menu")
-    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v77")
+    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v78")
     st.divider()
-    st.write("**Wersja:** v7.7")
+    st.write("**Wersja:** v7.8")
 
+# --- 5. WIDOK: E-DORĘCZENIA (PRZYWRÓCONY) ---
 if choice == "📡 e-Doręczenia":
     st.header("📡 Monitor e-Doręczeń")
     col1, col2 = st.columns(2)
@@ -112,12 +112,12 @@ if choice == "📡 e-Doręczenia":
         st.warning("Przerwy widoczne w kalendarzu poniżej.")
         st.markdown('<a href="https://www.gov.pl/web/e-doreczenia/niedostepnosc-uslugi-edoreczen" style="color:#007bff;font-weight:bold;">Strona GOV.PL</a>', unsafe_allow_html=True)
     st.divider()
-    cal_data = calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v77")
+    cal_data = calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v78")
     if "eventClick" in cal_data:
         ev = cal_data["eventClick"]["event"]
         st.success(f"🔍 **Zgłosił:** {ev['extendedProps']['provider']} | **Publikacja:** {ev['extendedProps']['pub_date']}")
 
-# --- 5. SYSTEM I SOFT ---
+# --- 6. WIDOK: SYSTEM I SOFT (FINALNA NAPRAWA SPRZĘTU) ---
 elif choice == "💻 System i Soft":
     st.header("💻 Audyt Sprzętowo-Programowy")
     
@@ -131,34 +131,42 @@ elif choice == "💻 System i Soft":
     }
 
     st.subheader("1. Wykonaj Raport (PowerShell Admin)")
-    final_ps = (
-        "powershell -Command \"Write-Output '---HARDWARE---'; "
-        "Write-Output ('MODEL:' + (Get-CimInstance Win32_ComputerSystem).Model); "
-        "Write-Output ('CPU:' + (Get-CimInstance Win32_Processor).Name); "
-        "Write-Output ('RAM:' + [Math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object Capacity -Sum).Sum / 1GB) + ' GB'); "
-        "Write-Output ('GPU:' + (Get-CimInstance Win32_VideoController).Name); "
-        "Write-Output '---SOFTWARE---'; "
+    # NOWA KOMENDA - Zmiana zapisu na ASCII (najbezpieczniejszy format tekstowy)
+    ps_cmd = (
+        "powershell -Command \"Write-Output 'MODEL:' (Get-CimInstance Win32_ComputerSystem).Model | Out-File C:\\Test\\raport_systemowy.txt -Encoding ascii; "
+        "Write-Output 'CPU:' (Get-CimInstance Win32_Processor).Name | Out-File C:\\Test\\raport_systemowy.txt -Append -Encoding ascii; "
+        "Write-Output 'RAM:' ((Get-CimInstance Win32_PhysicalMemory | Measure-Object Capacity -Sum).Sum / 1GB) 'GB' | Out-File C:\\Test\\raport_systemowy.txt -Append -Encoding ascii; "
+        "Write-Output 'GPU:' (Get-CimInstance Win32_VideoController).Name | Out-File C:\\Test\\raport_systemowy.txt -Append -Encoding ascii; "
         "Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | "
-        "Select-Object DisplayName, DisplayVersion | Out-File C:\\Test\\raport_systemowy.txt -Encoding utf8; exit\""
+        "Select-Object DisplayName, DisplayVersion | Out-File C:\\Test\\raport_systemowy.txt -Append -Encoding ascii; exit\""
     )
-    st.code(final_ps, language='powershell')
+    st.code(ps_cmd, language='powershell')
 
     st.divider()
-    up = st.file_uploader("2. Wgraj raport z C:\\Test\\raport_systemowy.txt", type="txt", key="up_v77")
+    up = st.file_uploader("2. Wgraj raport z C:\\Test\\raport_systemowy.txt", type="txt", key="up_v78")
 
     if up:
-        raw_text = up.read().decode('utf-8', errors='ignore')
-        lines = raw_text.splitlines()
+        # Odczytujemy plik próbując różnych kodowań
+        raw_bytes = up.read()
+        encodings = ['ascii', 'utf-8', 'utf-16']
+        text = ""
+        for enc in encodings:
+            try:
+                text = raw_bytes.decode(enc)
+                if "MODEL:" in text: break
+            except: continue
+            
+        lines = text.splitlines()
         hw = {'Model': 'N/A', 'CPU': 'N/A', 'RAM': 'N/A', 'GPU': 'N/A'}
         
         for line in lines:
-            line_clean = line.strip().upper()
-            if "MODEL:" in line_clean: hw['Model'] = line.split(':', 1)[1].strip()
-            elif "CPU:" in line_clean: hw['CPU'] = line.split(':', 1)[1].strip().split('@')[0]
-            elif "RAM:" in line_clean: hw['RAM'] = line.split(':', 1)[1].strip()
-            elif "GPU:" in line_clean: hw['GPU'] = line.split(':', 1)[1].strip()
+            l_up = line.upper()
+            if "MODEL:" in l_up: hw['Model'] = line.split(':', 1)[1].strip()
+            elif "CPU:" in l_up: hw['CPU'] = line.split(':', 1)[1].strip().split('@')[0]
+            elif "RAM:" in l_up: hw['RAM'] = line.split(':', 1)[1].strip()
+            elif "GPU:" in l_up: hw['GPU'] = line.split(':', 1)[1].strip()
 
-        st.success("✅ Dane wczytane pomyślnie!")
+        st.success("✅ Dane sprzętowe:")
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Maszyna", hw['Model'])
         c2.metric("Procesor", hw['CPU'])
@@ -169,7 +177,7 @@ elif choice == "💻 System i Soft":
         
         results, updates = [], []
         for line in lines:
-            if any(x in line.upper() for x in ["---", "MODEL:", "CPU:", "RAM:", "GPU:", "DISPLAYNAME"]): continue
+            if any(x in line.upper() for x in ["MODEL:", "CPU:", "RAM:", "GPU:", "DISPLAYNAME"]): continue
             parts = re.split(r'\s{2,}', line.strip())
             if len(parts) >= 1 and len(parts[0]) > 2:
                 name, ver = parts[0], (parts[1] if len(parts) > 1 else "---")
@@ -177,16 +185,17 @@ elif choice == "💻 System i Soft":
                 for key, meta in app_meta.items():
                     if key.lower() in name.lower():
                         try:
-                            v_num = int(re.search(r'\d+', ver).group())
-                            t_num = int(re.search(r'\d+', meta["target"]).group())
-                            if v_num < t_num:
+                            curr_v = int(re.search(r'\d+', ver).group())
+                            target_v = int(re.search(r'\d+', meta["target"]).group())
+                            if curr_v < target_v:
                                 status = f"⚠️ Update do {meta['target']}"
                                 updates.append({"n": name, "u": meta["url"]})
                         except: pass
                 results.append({"Program": name, "Wersja": ver, "Status": status})
 
         if results:
-            st.dataframe(pd.DataFrame(results).drop_duplicates().sort_values(by="Program"), use_container_width=True, hide_index=True)
+            df = pd.DataFrame(results).drop_duplicates().sort_values(by="Program")
+            st.dataframe(df, use_container_width=True, hide_index=True)
             if updates:
                 st.subheader("🚀 Instrukcja Aktualizacji")
                 for itm in updates: st.warning(f"**{itm['n']}** ➔ [Pobierz stąd]({itm['u']})")
