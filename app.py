@@ -9,7 +9,7 @@ from email.mime.text import MIMEText
 from streamlit_calendar import calendar
 
 # --- 1. KONFIGURACJA ---
-# Wersja kodu: v6.9 [2026-02-22]
+# Wersja kodu: v7.0 [2026-02-22]
 st.set_page_config(page_title="Operations Center PRO", layout="wide")
 
 # --- 2. [ZAMROŻONE] LOGIKA MONITOROWANIA I E-MAIL ---
@@ -87,9 +87,9 @@ run_daily_check(current_poczta)
 
 with st.sidebar:
     st.title("📂 Menu")
-    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v69")
+    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v70")
     st.divider()
-    st.write("**Wersja:** v6.9")
+    st.write("**Wersja:** v7.0")
 
 # --- 5. WIDOK: E-DORĘCZENIA (ZAMROŻONY) ---
 if choice == "📡 e-Doręczenia":
@@ -104,9 +104,9 @@ if choice == "📡 e-Doręczenia":
         st.warning("Przerwy widoczne w kalendarzu poniżej.")
         st.markdown('<a href="https://www.gov.pl/web/e-doreczenia/niedostepnosc-uslugi-edoreczen" style="color:#007bff;font-weight:bold;">Strona GOV.PL</a>', unsafe_allow_html=True)
     st.divider()
-    cal_data = calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v69")
+    calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v70")
 
-# --- 6. WIDOK: SYSTEM I SOFT (NAPRAWIONY ODCZYT) ---
+# --- 6. WIDOK: SYSTEM I SOFT (NAPRAWIONA KOMENDA I ODCZYT) ---
 elif choice == "💻 System i Soft":
     st.header("💻 Audyt Sprzętowo-Programowy")
     
@@ -119,38 +119,45 @@ elif choice == "💻 System i Soft":
         "NVIDIA": {"target": "550", "url": "https://www.nvidia.pl/Download/index.aspx?lang=pl"}
     }
 
-    st.subheader("1. Generuj raport (PowerShell Admin)")
-    st.code('$info = @{Model=(Get-CimInstance Win32_ComputerSystem).Model; CPU=(Get-CimInstance Win32_Processor).Name; RAM="$([Math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB)) GB"; GPU=(Get-CimInstance Win32_VideoController).Name}; $info | Out-File "C:\\Test\\raport_systemowy.txt"; Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | Select-Object DisplayName, DisplayVersion | Out-File "C:\\Test\\raport_systemowy.txt" -Append', language='powershell')
+    st.subheader("1. Kopiuj i uruchom komendę w PowerShell (Admin)")
+    # NOWA KOMENDA: Generuje czyste pary klucz:wartość dla sprzętu
+    clean_ps = (
+        "$hw = @{" +
+        " 'Model' = (Get-CimInstance Win32_ComputerSystem).Model;" +
+        " 'CPU' = (Get-CimInstance Win32_Processor).Name;" +
+        " 'RAM' = \"$([Math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB)) GB\";" +
+        " 'GPU' = (Get-CimInstance Win32_VideoController).Name " +
+        "}; " +
+        "$hw.GetEnumerator() | ForEach-Object { \"$($_.Key): $($_.Value)\" } | Out-File \"C:\\Test\\raport_systemowy.txt\" -Encoding utf8; " +
+        "Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | " +
+        "Select-Object DisplayName, DisplayVersion | Format-Table -HideTableHeaders | Out-File \"C:\\Test\\raport_systemowy.txt\" -Append -Encoding utf8"
+    )
+    st.code(clean_ps, language='powershell')
 
     st.divider()
-    up = st.file_uploader("Wgraj raport_systemowy.txt", type="txt", key="up_v69")
+    st.subheader("2. Wgraj raport z C:\\Test\\raport_systemowy.txt")
+    up = st.file_uploader("Wgraj raport", type="txt", key="up_v70")
 
     if up:
-        raw = up.read()
-        try: text = raw.decode('utf-16')
-        except: text = raw.decode('utf-8')
-
+        raw_text = up.read().decode('utf-8', errors='ignore')
         st.success("✅ Raport wczytany!")
         
-        # --- NOWA LOGIKA WYDOBYWANIA DANYCH (Mniej wrażliwa na format) ---
-        hw = {'model': 'N/A', 'cpu': 'N/A', 'ram': 'N/A', 'gpu': 'N/A'}
-        lines = text.splitlines()
+        # --- ODCZYT SPRZĘTU (Klucz: Wartość) ---
+        hw = {'Model': 'N/A', 'CPU': 'N/A', 'RAM': 'N/A', 'GPU': 'N/A'}
+        lines = raw_text.splitlines()
+        
         for line in lines:
-            line_clean = line.replace('"', '').replace(';', '').strip()
-            if "Model =" in line_clean or "Model=" in line_clean: 
-                hw['model'] = line_clean.split('=')[-1].strip()
-            elif "CPU =" in line_clean or "CPU=" in line_clean: 
-                hw['cpu'] = line_clean.split('=')[-1].strip().split('@')[0]
-            elif "RAM =" in line_clean or "RAM=" in line_clean: 
-                hw['ram'] = line_clean.split('=')[-1].strip()
-            elif "GPU =" in line_clean or "GPU=" in line_clean: 
-                hw['gpu'] = line_clean.split('=')[-1].strip()
+            if ":" in line and "=" not in line:
+                key_part = line.split(":")[0].strip()
+                val_part = line.split(":")[1].strip()
+                if key_part in hw:
+                    hw[key_part] = val_part
 
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Model Maszyny", hw['model'])
-        c2.metric("Procesor", hw['cpu'])
-        c3.metric("Pamięć RAM", hw['ram'])
-        c4.metric("Karta Graficzna", hw['gpu'])
+        c1.metric("Model Maszyny", hw['Model'])
+        c2.metric("Procesor", hw['CPU'].split('@')[0].strip())
+        c3.metric("Pamięć RAM", hw['RAM'])
+        c4.metric("Karta Graficzna", hw['GPU'])
         
         st.divider()
         
@@ -158,11 +165,16 @@ elif choice == "💻 System i Soft":
         results = []
         updates = []
         for line in lines:
-            if line.strip() and "=" not in line and "DisplayName" not in line and "----" not in line:
-                parts = re.split(r'\s{2,}', line.strip())
+            line = line.strip()
+            # Omijamy linie sprzętowe i puste
+            if line and ":" not in line and "DisplayName" not in line:
+                # Rozdzielamy nazwę od wersji (zakładając min. 2 spacje odstępu)
+                parts = re.split(r'\s{2,}', line)
                 if len(parts) >= 1:
-                    name, ver = parts[0], (parts[1] if len(parts) > 1 else "---")
+                    name = parts[0].strip()
+                    ver = parts[1].strip() if len(parts) > 1 else "---"
                     status = "✅ OK"
+                    
                     for key, meta in app_meta.items():
                         if key.lower() in name.lower():
                             try:
@@ -174,13 +186,11 @@ elif choice == "💻 System i Soft":
         
         if results:
             df = pd.DataFrame(results).drop_duplicates().sort_values(by="Program")
-            st.subheader("📋 Wszystkie Wykryte Aplikacje")
+            st.subheader("📋 Wykryte Oprogramowanie")
             st.dataframe(df, use_container_width=True, hide_index=True)
             
             if updates:
                 st.divider()
                 st.subheader("🚀 Instrukcja Aktualizacji")
                 for item in updates:
-                    st.warning(f"**{item['name']}** ➔ [Pobierz stąd]({item['url']})")
-    else:
-        st.info("💡 Wgraj plik `raport_systemowy.txt`, aby odświeżyć dane.")
+                    st.warning(f"**{item['name']}** ➔ [Pobierz nową wersję]({item['url']})")
