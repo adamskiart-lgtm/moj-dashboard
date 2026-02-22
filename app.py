@@ -10,7 +10,7 @@ from email.mime.text import MIMEText
 from streamlit_calendar import calendar
 
 # --- 1. KONFIGURACJA ---
-# Wersja kodu: v6.7 [2026-02-22]
+# Wersja kodu: v6.8 [2026-02-22]
 st.set_page_config(page_title="Operations Center PRO", layout="wide")
 
 # --- 2. [ZAMROŻONE] LOGIKA MONITOROWANIA I E-MAIL ---
@@ -88,9 +88,9 @@ run_daily_check(current_poczta)
 
 with st.sidebar:
     st.title("📂 Menu")
-    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v67")
+    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v68")
     st.divider()
-    st.write("**Wersja:** v6.7")
+    st.write("**Wersja:** v6.8")
 
 # --- 5. WIDOK: E-DORĘCZENIA (ZAMROŻONY) ---
 if choice == "📡 e-Doręczenia":
@@ -105,66 +105,83 @@ if choice == "📡 e-Doręczenia":
         st.warning("Przerwy widoczne w kalendarzu poniżej.")
         st.markdown('<a href="https://www.gov.pl/web/e-doreczenia/niedostepnosc-uslugi-edoreczen" style="color:#007bff;font-weight:bold;">Strona GOV.PL</a>', unsafe_allow_html=True)
     st.divider()
-    cal_data = calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v67")
+    cal_data = calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v68")
     if "eventClick" in cal_data:
         ev = cal_data["eventClick"]["event"]
         st.success(f"🔍 **Zgłosił:** {ev['extendedProps']['provider']} | **Publikacja:** {ev['extendedProps']['pub_date']}")
 
-# --- 6. WIDOK: SYSTEM I SOFT (FULL SPECS) ---
+# --- 6. WIDOK: SYSTEM I SOFT ---
 elif choice == "💻 System i Soft":
     st.header("💻 Audyt Sprzętowo-Programowy")
     
-    st.subheader("1. Przygotuj raport zbiorczy")
-    st.write("Skopiuj i wklej w PowerShell (Administrator):")
-    ps_script = '$info = @{Model=(Get-CimInstance Win32_ComputerSystem).Model; CPU=(Get-CimInstance Win32_Processor).Name; RAM="$([Math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB)) GB"; GPU=(Get-CimInstance Win32_VideoController).Name}; $info | Out-File "C:\\Test\\raport_systemowy.txt"; Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | Select-Object DisplayName, DisplayVersion | Out-File "C:\\Test\\raport_systemowy.txt" -Append'
-    st.code(ps_script, language='powershell')
+    # Baza metadanych dla programów (zweryfikowane linki)
+    app_meta = {
+        "Adobe Photoshop": {"target": "27.3", "url": "https://www.adobe.com/pl/creativecloud/desktop.html"},
+        "Norton": {"target": "22.24", "url": "https://my.norton.com/"},
+        "Epic Games": {"target": "15.0", "url": "https://www.epicgames.com/site/pl/home"},
+        "Fortnite": {"target": "28.0", "url": "https://www.epicgames.com/fortnite/pl/download"},
+        "Java": {"target": "8.0", "url": "https://www.java.com/pl/download/"},
+        "NVIDIA": {"target": "550", "url": "https://www.nvidia.pl/Download/index.aspx?lang=pl"}
+    }
+
+    st.subheader("1. Generuj raport zbiorczy")
+    st.code('$info = @{Model=(Get-CimInstance Win32_ComputerSystem).Model; CPU=(Get-CimInstance Win32_Processor).Name; RAM="$([Math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB)) GB"; GPU=(Get-CimInstance Win32_VideoController).Name}; $info | Out-File "C:\\Test\\raport_systemowy.txt"; Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | Select-Object DisplayName, DisplayVersion | Out-File "C:\\Test\\raport_systemowy.txt" -Append', language='powershell')
 
     st.divider()
-    st.subheader("2. Wgraj raport i sprawdź specyfikację")
-    up = st.file_uploader("Wgraj raport_systemowy.txt", type="txt", key="up_v67")
+    up = st.file_uploader("Wgraj raport_systemowy.txt", type="txt", key="up_v68")
 
     if up:
         raw = up.read()
         try: text = raw.decode('utf-16')
         except: text = raw.decode('utf-8')
 
-        # --- WYCIĄGANIE PEŁNEJ SPECYFIKACJI ---
-        m_model = re.search(r'Model\s+=\s+(.*)', text)
-        m_cpu = re.search(r'CPU\s+=\s+(.*)', text)
-        m_ram = re.search(r'RAM\s+=\s+(.*)', text)
-        m_gpu = re.search(r'GPU\s+=\s+(.*)', text)
-
-        st.success("✅ Dane sprzętowe wczytane pomyślnie!")
+        # Poprawiony odczyt specyfikacji (używamy split, bo regex przy hashu w PS bywa zawodny)
+        st.success("✅ Raport wczytany!")
         
-        # Wyświetlanie specyfikacji w kolumnach
+        # Wyciąganie danych sprzętowych metodą wyszukiwania linii
+        hw = {}
+        for line in text.splitlines():
+            if "Model =" in line: hw['model'] = line.split('=')[-1].strip()
+            if "CPU =" in line: hw['cpu'] = line.split('=')[-1].strip().split('@')[0]
+            if "RAM =" in line: hw['ram'] = line.split('=')[-1].strip()
+            if "GPU =" in line: hw['gpu'] = line.split('=')[-1].strip()
+
         c1, c2, c3, c4 = st.columns(4)
-        with c1: st.metric("Model Maszyny", m_model.group(1) if m_model else "N/A")
-        with c2: st.metric("Procesor", m_cpu.group(1).split('@')[0] if m_cpu else "N/A")
-        with c3: st.metric("Pamięć RAM", m_ram.group(1) if m_ram else "N/A")
-        with c4: st.metric("Karta Graficzna", m_gpu.group(1) if m_gpu else "N/A")
+        c1.metric("Model Maszyny", hw.get('model', 'N/A'))
+        c2.metric("Procesor", hw.get('cpu', 'N/A'))
+        c3.metric("Pamięć RAM", hw.get('ram', 'N/A'))
+        c4.metric("Karta Graficzna", hw.get('gpu', 'N/A'))
         
         st.divider()
         
-        # --- ANALIZA OPROGRAMOWANIA ---
-        app_meta = {"Adobe Photoshop": "27.0", "Norton": "22.0", "Epic Games": "15.0", "Fortnite": "28.0", "Java": "8.0"}
+        # Analiza programów i weryfikacja
         results = []
+        updates_needed = []
         for line in text.splitlines():
             if line.strip() and "=" not in line and "DisplayName" not in line:
                 parts = re.split(r'\s{2,}', line.strip())
                 if len(parts) >= 1:
                     name, ver = parts[0], (parts[1] if len(parts) > 1 else "---")
                     status = "✅ OK"
-                    for key, target in app_meta.items():
+                    
+                    for key, meta in app_meta.items():
                         if key.lower() in name.lower():
                             try:
-                                if float(ver.split('.')[0]) < float(target.split('.')[0]):
-                                    status = f"⚠️ Update do {target}"
-                            except: status = "✅ Zweryfikowano"
+                                if float(ver.split('.')[0]) < float(meta["target"].split('.')[0]):
+                                    status = f"⚠️ Update do {meta['target']}"
+                                    updates_needed.append({"name": name, "url": meta["url"]})
+                            except: pass
                     results.append({"Program": name, "Wersja": ver, "Status": status})
         
         if results:
-            df = pd.DataFrame(results).drop_duplicates().sort_values(by="Program")
             st.subheader("📋 Zainstalowane Oprogramowanie")
+            df = pd.DataFrame(results).drop_duplicates().sort_values(by="Program")
             st.dataframe(df, use_container_width=True, hide_index=True)
+            
+            if updates_needed:
+                st.divider()
+                st.subheader("🚀 Instrukcja Aktualizacji")
+                for item in updates_needed:
+                    st.warning(f"**{item['name']}** ➔ [Pobierz nową wersję stąd]({item['url']})")
     else:
-        st.info("💡 Wgraj wygenerowany plik `raport_systemowy.txt`, aby zobaczyć pełną specyfikację maszyny i listę oprogramowania.")
+        st.info("💡 Wgraj plik `raport_systemowy.txt`, aby zobaczyć dane sprzętowe.")
