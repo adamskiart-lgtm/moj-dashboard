@@ -121,4 +121,70 @@ elif choice == "💻 System i Soft":
         "Adobe Photoshop": {"target": "27.3", "url": "https://www.adobe.com/pl/creativecloud/desktop.html"},
         "Norton": {"target": "22.24", "url": "https://my.norton.com/"},
         "Epic Games": {"target": "15.0", "url": "https://www.epicgames.com/site/pl/home"},
-        "Fortnite": {"target": "28.0", "url": "https://www.
+        "Fortnite": {"target": "28.0", "url": "https://www.epicgames.com/fortnite/pl/download"},
+        "Java": {"target": "8.0", "url": "https://www.java.com/pl/download/"},
+        "NVIDIA": {"target": "550", "url": "https://www.nvidia.pl/Download/index.aspx?lang=pl"}
+    }
+
+    st.subheader("1. Kopiuj i uruchom w PowerShell (Admin)")
+    # NOWA KOMENDA: Wymusza czysty tekst bez ucinania nazw
+    ps_command = (
+        "powershell -Command \"$h = @{ 'Model'=(Get-CimInstance Win32_ComputerSystem).Model; "
+        "'CPU'=(Get-CimInstance Win32_Processor).Name; "
+        "'RAM'='$( [Math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB) ) GB'; "
+        "'GPU'=(Get-CimInstance Win32_VideoController).Name }; "
+        "$h.GetEnumerator() | ForEach-Object { \\\"$($_.Key): $($_.Value)\\\" } | Out-File 'C:\\Test\\raport_systemowy.txt' -Encoding utf8; "
+        "Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | "
+        "Select-Object DisplayName, DisplayVersion | Format-List | Out-File 'C:\\Test\\raport_systemowy.txt' -Append -Encoding utf8; "
+        "exit\""
+    )
+    st.code(ps_command, language='powershell')
+    st.caption("💡 Okno PowerShell zamknie się samo po wykonaniu raportu.")
+
+    st.divider()
+    up = st.file_uploader("2. Wgraj raport z C:\\Test\\raport_systemowy.txt", type="txt", key="up_v73")
+
+    if up:
+        raw_text = up.read().decode('utf-8', errors='ignore')
+        st.success("✅ Raport wczytany!")
+        
+        # --- ODCZYT SPRZĘTU ---
+        hw = {'Model': 'N/A', 'CPU': 'N/A', 'RAM': 'N/A', 'GPU': 'N/A'}
+        lines = raw_text.splitlines()
+        for line in lines:
+            if ":" in line and "DisplayName" not in line and "DisplayVersion" not in line:
+                k, v = line.split(":", 1)[0].strip(), line.split(":", 1)[1].strip()
+                if k in hw: hw[k] = v
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Model", hw['Model'])
+        c2.metric("Procesor", hw['CPU'].split('@')[0].strip())
+        c3.metric("RAM", hw['RAM'])
+        c4.metric("Grafika", hw['GPU'])
+        
+        st.divider()
+        
+        # --- ANALIZA PROGRAMÓW ---
+        results, updates, current_name = [], [], ""
+        for line in lines:
+            if "DisplayName :" in line: current_name = line.split(":")[-1].strip()
+            if "DisplayVersion :" in line and current_name:
+                ver = line.split(":")[-1].strip()
+                status = "✅ OK"
+                for key, meta in app_meta.items():
+                    if key.lower() in current_name.lower():
+                        try:
+                            if float(ver.split('.')[0]) < float(meta["target"].split('.')[0]):
+                                status = f"⚠️ Update do {meta['target']}"
+                                updates.append({"name": current_name, "url": meta["url"]})
+                        except: pass
+                results.append({"Program": current_name, "Wersja": ver, "Status": status})
+                current_name = ""
+        
+        if results:
+            df = pd.DataFrame(results).drop_duplicates().sort_values(by="Program")
+            st.dataframe(df, use_container_width=True, hide_index=True)
+            if updates:
+                st.subheader("🚀 Instrukcja Aktualizacji")
+                for itm in updates:
+                    st.warning(f"**{itm['name']}** ➔ [Pobierz stąd]({itm['url']})")
