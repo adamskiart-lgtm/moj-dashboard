@@ -9,7 +9,7 @@ from email.mime.text import MIMEText
 from streamlit_calendar import calendar
 
 # --- 1. KONFIGURACJA ---
-# Wersja kodu: v7.3 [2026-02-22]
+# Wersja kodu: v7.4 [2026-02-22]
 st.set_page_config(page_title="Operations Center PRO", layout="wide")
 
 # --- CSS: MAŁA CZCIONKA DLA KOMPLETNYCH INFORMACJI ---
@@ -96,9 +96,9 @@ run_daily_check(current_poczta)
 
 with st.sidebar:
     st.title("📂 Menu")
-    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v73")
+    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v74")
     st.divider()
-    st.write("**Wersja:** v7.3")
+    st.write("**Wersja:** v7.4")
 
 # --- 5. WIDOK: E-DORĘCZENIA (ZAMROŻONY) ---
 if choice == "📡 e-Doręczenia":
@@ -111,9 +111,9 @@ if choice == "📡 e-Doręczenia":
         st.subheader("🕵️ GOV.PL")
         st.warning("Przerwy widoczne w kalendarzu poniżej.")
     st.divider()
-    calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v73")
+    calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v74")
 
-# --- 6. WIDOK: SYSTEM I SOFT (NAPRAWIONY ODCZYT & UI) ---
+# --- 6. WIDOK: SYSTEM I SOFT (FINALNA NAPRAWA LISTY) ---
 elif choice == "💻 System i Soft":
     st.header("💻 Audyt Sprzętowo-Programowy")
     
@@ -126,8 +126,7 @@ elif choice == "💻 System i Soft":
         "NVIDIA": {"target": "550", "url": "https://www.nvidia.pl/Download/index.aspx?lang=pl"}
     }
 
-    st.subheader("1. Kopiuj i uruchom w PowerShell (Admin)")
-    # NOWA KOMENDA: Wymusza czysty tekst bez ucinania nazw
+    st.subheader("1. Wykonaj Raport (PowerShell Admin)")
     ps_command = (
         "powershell -Command \"$h = @{ 'Model'=(Get-CimInstance Win32_ComputerSystem).Model; "
         "'CPU'=(Get-CimInstance Win32_Processor).Name; "
@@ -135,27 +134,27 @@ elif choice == "💻 System i Soft":
         "'GPU'=(Get-CimInstance Win32_VideoController).Name }; "
         "$h.GetEnumerator() | ForEach-Object { \\\"$($_.Key): $($_.Value)\\\" } | Out-File 'C:\\Test\\raport_systemowy.txt' -Encoding utf8; "
         "Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | "
-        "Select-Object DisplayName, DisplayVersion | Format-List | Out-File 'C:\\Test\\raport_systemowy.txt' -Append -Encoding utf8; "
+        "Select-Object DisplayName, DisplayVersion | Out-File 'C:\\Test\\raport_systemowy.txt' -Append -Encoding utf8; "
         "exit\""
     )
     st.code(ps_command, language='powershell')
-    st.caption("💡 Okno PowerShell zamknie się samo po wykonaniu raportu.")
 
     st.divider()
-    up = st.file_uploader("2. Wgraj raport z C:\\Test\\raport_systemowy.txt", type="txt", key="up_v73")
+    up = st.file_uploader("2. Wgraj raport z C:\\Test\\raport_systemowy.txt", type="txt", key="up_v74")
 
     if up:
         raw_text = up.read().decode('utf-8', errors='ignore')
-        st.success("✅ Raport wczytany!")
+        lines = raw_text.splitlines()
         
         # --- ODCZYT SPRZĘTU ---
         hw = {'Model': 'N/A', 'CPU': 'N/A', 'RAM': 'N/A', 'GPU': 'N/A'}
-        lines = raw_text.splitlines()
         for line in lines:
-            if ":" in line and "DisplayName" not in line and "DisplayVersion" not in line:
-                k, v = line.split(":", 1)[0].strip(), line.split(":", 1)[1].strip()
-                if k in hw: hw[k] = v
+            if ":" in line and ("DisplayName" not in line and "DisplayVersion" not in line):
+                parts = line.split(":", 1)
+                k = parts[0].strip()
+                if k in hw: hw[k] = parts[1].strip()
 
+        st.success("✅ Dane sprzętowe:")
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Model", hw['Model'])
         c2.metric("Procesor", hw['CPU'].split('@')[0].strip())
@@ -164,27 +163,44 @@ elif choice == "💻 System i Soft":
         
         st.divider()
         
-        # --- ANALIZA PROGRAMÓW ---
-        results, updates, current_name = [], [], ""
+        # --- ANALIZA PROGRAMÓW (NOWA LOGIKA) ---
+        results, updates = [], []
+        # Szukamy par w liniach, które nie są sprzętowe
         for line in lines:
-            if "DisplayName :" in line: current_name = line.split(":")[-1].strip()
-            if "DisplayVersion :" in line and current_name:
-                ver = line.split(":")[-1].strip()
+            line = line.strip()
+            if not line or ":" in line[:15] or "----" in line or "DisplayName" in line:
+                continue
+            
+            # Dzielimy po wielu spacjach (min. 2)
+            parts = re.split(r'\s{2,}', line)
+            if len(parts) >= 1:
+                name = parts[0]
+                version = parts[1] if len(parts) > 1 else "---"
+                
                 status = "✅ OK"
                 for key, meta in app_meta.items():
-                    if key.lower() in current_name.lower():
+                    if key.lower() in name.lower():
                         try:
-                            if float(ver.split('.')[0]) < float(meta["target"].split('.')[0]):
+                            # Próba porównania wersji
+                            curr_v = float(re.search(r'\d+', version).group())
+                            target_v = float(re.search(r'\d+', meta["target"]).group())
+                            if curr_v < target_v:
                                 status = f"⚠️ Update do {meta['target']}"
-                                updates.append({"name": current_name, "url": meta["url"]})
-                        except: pass
-                results.append({"Program": current_name, "Wersja": ver, "Status": status})
-                current_name = ""
-        
+                                updates.append({"name": name, "url": meta["url"]})
+                        except:
+                            status = "✅ Sprawdzono"
+                
+                results.append({"Program": name, "Wersja": version, "Status": status})
+
         if results:
+            st.subheader("📋 Lista Oprogramowania")
             df = pd.DataFrame(results).drop_duplicates().sort_values(by="Program")
             st.dataframe(df, use_container_width=True, hide_index=True)
+            
             if updates:
+                st.divider()
                 st.subheader("🚀 Instrukcja Aktualizacji")
                 for itm in updates:
                     st.warning(f"**{itm['name']}** ➔ [Pobierz stąd]({itm['url']})")
+        else:
+            st.error("Nie znaleziono aplikacji w pliku. Upewnij się, że użyłeś poprawnej komendy PowerShell.")
