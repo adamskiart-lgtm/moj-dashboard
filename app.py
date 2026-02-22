@@ -12,7 +12,7 @@ from streamlit_calendar import calendar
 # Wersja kodu: v7.5 [2026-02-22]
 st.set_page_config(page_title="Operations Center PRO", layout="wide")
 
-# --- CSS: KOMPAKTOWE METRYKI ---
+# --- CSS: KOMPAKTOWE METRYKI DLA PEŁNEJ CZYTELNOŚCI ---
 st.markdown("""
     <style>
     [data-testid="stMetricValue"] { font-size: 1.4rem !important; font-weight: 700; color: #1E3A8A; }
@@ -112,7 +112,7 @@ if choice == "📡 e-Doręczenia":
     st.divider()
     calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v75")
 
-# --- 6. WIDOK: SYSTEM I SOFT (FIXED HARDWARE) ---
+# --- 6. WIDOK: SYSTEM I SOFT (FINALNA NAPRAWA SPRZĘTU) ---
 elif choice == "💻 System i Soft":
     st.header("💻 Audyt Sprzętowo-Programowy")
     
@@ -126,17 +126,19 @@ elif choice == "💻 System i Soft":
     }
 
     st.subheader("1. Wykonaj Raport (PowerShell Admin)")
-    # UPROSZCZONA KOMENDA - bez ryzykownych znaków
+    # SKRYPT ODPORNY NA BŁĘDY - czysty tekst
     final_ps = (
-        "Write-Output 'MODEL:' (Get-CimInstance Win32_ComputerSystem).Model > C:\\Test\\raport_systemowy.txt; "
-        "Write-Output 'CPU:' (Get-CimInstance Win32_Processor).Name >> C:\\Test\\raport_systemowy.txt; "
-        "Write-Output 'RAM:' ((Get-CimInstance Win32_PhysicalMemory | Measure-Object Capacity -Sum).Sum / 1GB) 'GB' >> C:\\Test\\raport_systemowy.txt; "
-        "Write-Output 'GPU:' (Get-CimInstance Win32_VideoController).Name >> C:\\Test\\raport_systemowy.txt; "
+        "powershell -Command \"Write-Output 'HARDWARE_DATA'; "
+        "Write-Output ('MODEL: ' + (Get-CimInstance Win32_ComputerSystem).Model); "
+        "Write-Output ('CPU: ' + (Get-CimInstance Win32_Processor).Name); "
+        "Write-Output ('RAM: ' + [Math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object Capacity -Sum).Sum / 1GB) + ' GB'); "
+        "Write-Output ('GPU: ' + (Get-CimInstance Win32_VideoController).Name); "
+        "Write-Output 'SOFTWARE_DATA'; "
         "Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | "
-        "Select-Object DisplayName, DisplayVersion | Out-File C:\\Test\\raport_systemowy.txt -Append -Encoding utf8; "
-        "exit"
+        "Select-Object DisplayName, DisplayVersion | Out-File C:\\Test\\raport_systemowy.txt -Encoding utf8; exit\""
     )
     st.code(final_ps, language='powershell')
+    st.caption("💡 Po uruchomieniu okno konsoli zamknie się automatycznie.")
 
     st.divider()
     up = st.file_uploader("2. Wgraj raport z C:\\Test\\raport_systemowy.txt", type="txt", key="up_v75")
@@ -148,12 +150,12 @@ elif choice == "💻 System i Soft":
         # --- ROBUST HARDWARE DISCOVERY ---
         hw = {'Model': 'N/A', 'CPU': 'N/A', 'RAM': 'N/A', 'GPU': 'N/A'}
         for line in lines:
-            line_up = line.upper()
-            if "MODEL:" in line_up: hw['Model'] = line.split(':', 1)[1].strip()
-            elif "CPU:" in line_up: hw['CPU'] = line.split(':', 1)[1].strip().split('@')[0]
-            elif "RAM:" in line_up: hw['RAM'] = line.split(':', 1)[1].strip()
-            elif "GPU:" in line_up: hw['GPU'] = line.split(':', 1)[1].strip()
+            if "MODEL:" in line: hw['Model'] = line.split(':', 1)[1].strip()
+            if "CPU:" in line: hw['CPU'] = line.split(':', 1)[1].strip().split('@')[0]
+            if "RAM:" in line: hw['RAM'] = line.split(':', 1)[1].strip()
+            if "GPU:" in line: hw['GPU'] = line.split(':', 1)[1].strip()
 
+        st.success("✅ Dane wczytane pomyślnie!")
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Maszyna", hw['Model'])
         c2.metric("Procesor", hw['CPU'])
@@ -165,7 +167,8 @@ elif choice == "💻 System i Soft":
         # --- PROGRAM ANALYZER ---
         results, updates = [], []
         for line in lines:
-            if any(x in line.upper() for x in ["MODEL:", "CPU:", "RAM:", "GPU:", "DISPLAYNAME"]): continue
+            # Omijamy linie sprzętowe i nagłówki
+            if any(x in line for x in ["HARDWARE", "SOFTWARE", "MODEL:", "CPU:", "RAM:", "GPU:", "DisplayName"]): continue
             parts = re.split(r'\s{2,}', line.strip())
             if len(parts) >= 1 and len(parts[0]) > 2:
                 name, ver = parts[0], (parts[1] if len(parts) > 1 else "---")
@@ -173,9 +176,9 @@ elif choice == "💻 System i Soft":
                 for key, meta in app_meta.items():
                     if key.lower() in name.lower():
                         try:
-                            v_clean = re.sub(r'[^\d.]', '', ver).split('.')[0]
-                            t_clean = meta["target"].split('.')[0]
-                            if int(v_clean) < int(t_clean):
+                            v_num = int(re.search(r'\d+', ver).group())
+                            t_num = int(re.search(r'\d+', meta["target"]).group())
+                            if v_num < t_num:
                                 status = f"⚠️ Update do {meta['target']}"
                                 updates.append({"n": name, "u": meta["url"]})
                         except: pass
