@@ -9,15 +9,15 @@ from email.mime.text import MIMEText
 from streamlit_calendar import calendar
 
 # --- 1. KONFIGURACJA ---
-# Wersja kodu: v7.2 [2026-02-22]
+# Wersja kodu: v7.3 [2026-02-22]
 st.set_page_config(page_title="Operations Center PRO", layout="wide")
 
-# --- CSS: ZMNIEJSZENIE CZCIONKI DLA PEŁNEJ CZYTELNOŚCI ---
+# --- CSS: MAŁA CZCIONKA DLA KOMPLETNYCH INFORMACJI ---
 st.markdown("""
     <style>
-    [data-testid="stMetricValue"] { font-size: 1.5rem !important; }
+    [data-testid="stMetricValue"] { font-size: 1.3rem !important; font-weight: 700; }
     [data-testid="stMetricLabel"] { font-size: 0.8rem !important; }
-    .stTable { font-size: 0.85rem !important; }
+    .stDataFrame { font-size: 0.8rem !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -96,9 +96,9 @@ run_daily_check(current_poczta)
 
 with st.sidebar:
     st.title("📂 Menu")
-    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v72")
+    choice = st.radio("Nawigacja:", ["📡 e-Doręczenia", "💻 System i Soft"], key="nav_v73")
     st.divider()
-    st.write("**Wersja:** v7.2")
+    st.write("**Wersja:** v7.3")
 
 # --- 5. WIDOK: E-DORĘCZENIA (ZAMROŻONY) ---
 if choice == "📡 e-Doręczenia":
@@ -111,7 +111,7 @@ if choice == "📡 e-Doręczenia":
         st.subheader("🕵️ GOV.PL")
         st.warning("Przerwy widoczne w kalendarzu poniżej.")
     st.divider()
-    calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v72")
+    calendar(events=get_dynamic_gov_events(), options={"headerToolbar":{"left":"prev,next today","center":"title","right":"dayGridMonth"},"initialView":"dayGridMonth","height":450,"locale":"pl","displayEventTime":False,"selectable":True}, key="cal_v73")
 
 # --- 6. WIDOK: SYSTEM I SOFT (NAPRAWIONY ODCZYT & UI) ---
 elif choice == "💻 System i Soft":
@@ -121,76 +121,4 @@ elif choice == "💻 System i Soft":
         "Adobe Photoshop": {"target": "27.3", "url": "https://www.adobe.com/pl/creativecloud/desktop.html"},
         "Norton": {"target": "22.24", "url": "https://my.norton.com/"},
         "Epic Games": {"target": "15.0", "url": "https://www.epicgames.com/site/pl/home"},
-        "Fortnite": {"target": "28.0", "url": "https://www.epicgames.com/fortnite/pl/download"},
-        "Java": {"target": "8.0", "url": "https://www.java.com/pl/download/"},
-        "NVIDIA": {"target": "550", "url": "https://www.nvidia.pl/Download/index.aspx?lang=pl"}
-    }
-
-    st.subheader("1. Kopiuj i wklej do PowerShell (Admin)")
-    # SKRYPT: Zbiera dane, zapisuje i sam się zamyka
-    ps_final = (
-        "$h = @{" +
-        "'Model'=(Get-CimInstance Win32_ComputerSystem).Model;" +
-        "'CPU'=(Get-CimInstance Win32_Processor).Name;" +
-        "'RAM'=\"$([Math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB)) GB\";" +
-        "'GPU'=(Get-CimInstance Win32_VideoController).Name" +
-        "}; " +
-        "$h.GetEnumerator() | ForEach-Object { \"$($_.Key): $($_.Value)\" } | Out-File 'C:\\Test\\raport_systemowy.txt' -Encoding utf8; " +
-        "Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | " +
-        "Select-Object DisplayName, DisplayVersion | Format-List | Out-File 'C:\\Test\\raport_systemowy.txt' -Append -Encoding utf8; " +
-        "exit"
-    )
-    st.code(ps_final, language='powershell')
-
-    st.divider()
-    up = st.file_uploader("2. Wgraj raport z C:\\Test\\raport_systemowy.txt", type="txt", key="up_v72")
-
-    if up:
-        raw_text = up.read().decode('utf-8', errors='ignore')
-        st.success("✅ Dane sprzętowe i programowe wczytane.")
-        
-        # ODCZYT SPRZĘTU
-        hw = {'Model': 'N/A', 'CPU': 'N/A', 'RAM': 'N/A', 'GPU': 'N/A'}
-        lines = raw_text.splitlines()
-        for line in lines:
-            if ":" in line and "=" not in line:
-                k, v = line.split(":", 1)[0].strip(), line.split(":", 1)[1].strip()
-                if k in hw: hw[k] = v
-
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Maszyna", hw['Model'])
-        c2.metric("Procesor", hw['CPU'].split('@')[0].strip())
-        c3.metric("RAM", hw['RAM'])
-        c4.metric("Grafika", hw['GPU'])
-        
-        st.divider()
-        
-        # ANALIZA PROGRAMÓW
-        results = []
-        updates = []
-        cur_name = ""
-        for line in lines:
-            if "DisplayName :" in line: cur_name = line.split(":")[-1].strip()
-            if "DisplayVersion :" in line and cur_name:
-                ver = line.split(":")[-1].strip()
-                status = "✅ OK"
-                for key, meta in app_meta.items():
-                    if key.lower() in cur_name.lower():
-                        try:
-                            if float(ver.split('.')[0]) < float(meta["target"].split('.')[0]):
-                                status = f"⚠️ Update"
-                                updates.append({"name": cur_name, "url": meta["url"]})
-                        except: pass
-                results.append({"Program": cur_name, "Wersja": ver, "Status": status})
-                cur_name = ""
-        
-        if results:
-            df = pd.DataFrame(results).drop_duplicates().sort_values(by="Program")
-            st.dataframe(df, use_container_width=True, hide_index=True)
-            
-            if updates:
-                st.divider()
-                st.subheader("🚀 Instrukcja Aktualizacji")
-                for itm in updates:
-                    st.warning(f"**{itm['name']}** ➔ [Link do pobrania]({itm['url']})")
-            
+        "Fortnite": {"target": "28.0", "url": "https://www.
