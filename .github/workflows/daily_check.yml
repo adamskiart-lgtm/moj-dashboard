@@ -1,0 +1,11 @@
+name: Wake up Dashboard and Check e-Doreczenia
+on:
+  schedule:
+    - cron: '0 9 * * *' # 10:00 rano czasu polskiego
+  workflow_dispatch:
+jobs:
+  ping_dashboard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Streamlit App
+        run: curl -I https://operations-center-pro.streamlit.app/
